@@ -1,0 +1,4161 @@
+---
+title: "TSA4 Notes 1"
+author: "Ryan Martin"
+date: "6/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+   
+# Notes from Time Seris Analysis 4th Edition
+  - Robert Shumway (Davis) and David Stoffer (Pittsburgh)
+  - Chapters 5 and 6 are advanced
+  - R package for text is "atsa"
+
+
+# Chapter 1
+
+- Time series analysis is the mathematical and statistical toolbox for dealing with experimental data observed over time
+- Economics has many time series:
+  - stock
+  - unemployment
+  - population series
+  - brain-wave series
+  
+- Two separate approaches
+  - time domain approach
+    - investigates lagged relationships
+    - e.g., how does what happened today affect what will happen tomorrrow
+  - frequency domain approach
+    - investigates cycles
+    - e.g., what is the economic cycle through periods of expansion and recession
+    
+## 1.1 The Nature of Time Series Data
+
+
+```{r}
+library(pacman)
+p_load(astsa)
+
+## Example 1.1, Johnson and Johnson Quarterly Earnings
+plot(jj, type="o", ylab="Quarterly Earnings per Share", main="Johnson and Johnson Quarterly Earnings")
+## Explore analyzing data like this in Chapter 2 and 6
+
+## Example 1.2 Global Warming
+# Global mean land-ocean temperature index from 1880 to 2015
+## Base period is 1951-1980
+plot(globtemp, type="o", ylab="Global Temperature Deviations", main="Yearly average global temperature Devations")
+
+
+## Example 1.3 Speech Data
+# .1 (100 ms or 1 decisecond) 1000 point sample of recorded speech for the phrase "aaa...hhh"
+# Spectral analysis can be used to produce a signature of this phrase that can be compared with signatures of various other library syllables to look for a match
+# (Hmm..  I guess shazaam works something like this)
+# Regular repetition of small wavelets
+# Separatoin between the packets is known as the pitch period
+plot(speech, ylab= "speech", main="100 ms Recording of 'Ah'")
+```
+
+
+_Example 1.4 Dow Jones Industrial Average_
+
+Daily returns (or percent change) of the Dow Jones Industrial Average (DJIA) rom April 20 2006 to  April 20 2016. Easy to spot the financial crisis of 2008 in the figure. Mean of the series is 0! Highly volatile (variable) periods tend to be 
+clustered. A common problem in this analysis is to forecast the volatility
+of future returns.
+
+*Models to forecast volatility*
+- ARCH and GARCH
+- stochastic volatility models
+- discuss in chapter 5 and 6z
+
+Data obtained using the Technical Trading Rules (TTR) package to download the data from Yahoo and then plot it.
+
+Used that fact that if $x_t$ is the actual value of the DJIA and $r_t = (x_t - x_{t-1})/x_{t-1}$ then $1 + r_t = x_t/x_{t-1}$. Finally
+\[ \log(1 + r_t) = \log(x_t) - \log(x_{t-1}) \approx r_t \] where the last equality holds for *small* $r_t$ because \[log(1 + p) = p - p^2/2 + p^3/3 - \cdots \] for $p \in (-1,1]$
+```{r}
+# library(TTR)
+# djia = getYahooData("^DJI", start=20060420, end=20160420, freq="daily")
+p_load(xts)
+djiar = diff(log(djia$Close))[-1] # approximate returns
+plot(djiar, main="DJIA Returns", type="n")
+lines(djiar)
+```   
+
+
+*Example 1.5 El Nino and Fish Population*
+
+- Multiple interacting time series
+  1. Southern Oscillation Index
+  2. Associated recruitment (number of new fish)
+- bother series over 453 month period; 1950-1987
+
+  
+1. SOI measures changes in air pressure, sea surface temperatures in the central pacific ocean
+  - central Pacific warms every 3-7 years due to El Nino effect
+  - periodic behavior is of interest because underlying processes of interest may be regular and the rate or frequency of oscillation characterizing the behavior of the underlying series would help to identify them
+  - shows two basic oscillation types:
+    - obvious annual cycle
+    - slower frequency that seems to repeat about every 4 years.
+  - the study of cycle and their strengths is the subject of *Chapter 4*
+
+The series are likely *related*. So, some kind of time series regression is warranted. Call this **Transfer function modeling**. Study in *Chapter 5*.
+
+```{r}
+par(mfrow = c(2,1)) # set up the graphics
+plot(soi, ylab="", xlab="", main="Southern Oscillation Index")
+plot(rec, ylab="", xlab="", main="Recruitment")
+```
+
+*Example 1.6 fMRI Imaging*
+
+- fundamental problem in classical statistics occurs when given a collection of independent series or vectors of series generated under varying experimental conditions or treatment configurations.
+  - have series where observe data collected from various locations in the brain via functional MRI (fMRI). 5 subjects given period brushing on the hand. Stimulus was applied for 32 seconds then stopped for 32 seconds. The signal period is (therefore) 64 seconds. The sampling rate is one observation every 2 seconds for 256 seconds (n = 128).
+    - average the results over subjects
+      - (they were evoked responses and all subjects were in phase)
+      - series show blood oxygenation-level dependent (BOLD) signal intensity
+        - this measures areas of activation in the brain
+        - periodicities appear strongly in the motor cortex, but less strongly in the thalamus and cerebellum
+        - suggests testing whether the areas are responding differently to the brush stimuls
+        - ANOVA techniques accomplish this in classical statistics 
+          - (ANOVA is the word they use for experimental design, basically)
+        - Chapter 7 shows how ANOVA techniques (again, experimental design) in classical stats extend to time series data.
+          - this leads to *spectral analysis of variance*
+            - (Again, I don't why they say analysis of variance, but they mean comparing results in an experiment. spectral is for time series part)
+            
+```{r}
+# My guess is each color is a different individual under treatment
+par(mfrow=c(2,1))
+ts.plot(fmri1[,2:5], col=1:4, ylab="BOLD", main="Cortex")
+ts.plot(fmri1[,6:9], col=1:4, ylab="BOLD", main="Thalamus & Cerebellum")
+```
+
+*Example 1.7 Earthquakes and Explosions*
+
+Two arrivals at a seismic recording station. 
+  - They are divided into two phases, P(t = 1, ..., 1024) and S(t = 1025, ... 2048)
+  - They are from recording instruments in Scandinavia
+  - They are observing earthquakes adn mining explosions with one of each shown in Figure 1.7.
+  - The general problem of interest is in distinguishing or discriminating between waveforms generated by earthquakes and waveforms generated by explosions.
+    - Features that may be important are the rough *maximum* amplitude ratios of the first phase P to the second phase S; the amplitude ratio tends to be smaller for earthquakes than for explosions.
+    - In the case of this data, the ratio appears to be less than .5 for earthquakes () and about 1 for explosion. (I don't know if that's true for explosion. Certainly closer to 1 for explosion than for earthquake, though.)
+    
+```{r}
+par(mfrow=c(2,1))
+plot(EQ5, main="Earthquake")
+plot(EXP6, main="Explosion")
+```
+
+
+
+## 1.2 Time Series Statistical Models
+
+Goal: produce plausible descriptions for sample data
+- Assume a time series can be defined as a collection of random variables indexed according to the order they are observed
+- In general, collection of random variables is called a stochastic process
+- the observed values are called the *realization*
+- since clear from context, time series can refer to *either* the stochastic process or its realization
+- appearance of data can be changed completely by adopting an insufficient sampling rate:
+  - wheels in old movies can appear to be turning backwards because of insufficient number of frames sampled by the camera! (it's interesting to think that movies are actually time series data...)
+  - 
+  
+*Example 1.8 White Noise (3 flavors)*
+- A simple kind of generated series might be a collectoin of uncorrelated random variables, $w_t$. mean 0 finite variance $\sigma_w^2$. Write \[w_t \sim wn(0, \sigma_w^2)\]. It's called white because its like white light; *all possible periodic oscillations are present*.
+- If want *iid white noise*, write it as $w_t \sim iid(0, \sigma_w^2)$.
+
+Note that *white noise cannot describe all time series behavior!. (of course)*. Two ways of introducing **serial correlatoin** and more **smoothness** into time series are given below (Example 1.9 and 1.10).
+
+*Example 1.9 Moving AVerages and Filtering*
+Replace white noise series $w_t$ by a moving average that smooths the series. e.g.
+$v_t = \frac{1}{3} (w_{t-1} + w_t + w_{t+1})$ 
+which leads to series shown below. The white noise series is *less smooth* than the moving average sequence. (I guess you could make any time series look like a line plot by adding enough autocorrelation to the plot. For example, you can almost always say the relationship between y and x doesn't really exist and instead it is driven by spurious correlatoin between x and the errors. Like X is increasing over time and the errors average level is also increasing over time and it makes it look like y is increasing with x. The question is when can you cast enough *reasonable doubt* on this idea to still make the claim. I think that is inherently what Carlos and Rosa are arguing with many practicioners: while the practicioners might be right, Rosa and Carlos want them to due more to eliminate other possibilities before making their conclusions. Of course, there is almost always room for people to be wrong.)
+
+Note that a linear combination of values in a time series (as $v_t$ is) is called a filter. That's why use "filter" code to generate v. (This explains some of the confusing and unexplained terminology in Liao's class, too.)
+
+```{r}
+w = rnorm(500,0,1)
+# 500 N(0,1) variates
+v = filter(w, sides=2, filter=rep(1/3,3)) # moving average
+par(mfrow=c(2,1))
+plot.ts(w, main="white noise")
+plot.ts(v, ylim=c(-3,3), main="moving average")
+```
+
+When there is some kind of quasi-periodic behavior (i.e. sinusoidal-ish shapes), we expect autoregressive model. Consider these in Chapter 3.
+
+(Note that, there is *always* some underlying cause of the time series. Just when we model time series, we are recognizing that there is some time-varying correlation between the unobservable causes! But the unobservables aren't "errors". Maybe a better term for the "error" is unexplainables. But we are always saying "we can't explain it with what we see but we can still predict some things from it". So, in the background, there is always some variable going up and down. Like the sun for the weather. The sun is ultimately driven by some periodic process too. With stocks, the question is tougher. What is the underlying unobservable process? 
+
+*Example 1.10 Autoregressions*
+
+**Note that autoregression is still a filter of white noise, as it is a linear combination of variables. Indeed, it is referred to as a *recursive* filter**.
+
+We can let $x_t$ be a second-order equation: \[x_t = x_{t-1} - .9 x_{t-2} + w_t\] successively for $t = 1, 2, ..., 500$.
+
+The filter function defaults to use zeros for the initial values. in this case $x_1 = w_1$
+
+```{r}
+w = rnorm(550,0,1)
+# 50 extra to avoid startup problems
+x = filter(w, filter=c(1,-.9), method="recursive")[-(1:50)] # remove first 50
+plot.ts(x, main="autoregression")
+```
+
+
+*Example 1.11 Random Walk with Drift*
+$\delta$ is the drift term. t = 1,2, .., and initial condition $x_0 = 0$. If $\delta = 0$, then it's just a random walk.
+
+\[x_t = \delta + x_{t-1} + w_t\]
+
+
+Note we can rewrite this:
+$x_t = \delta t + \sum_{j = 1} ^t w_j$
+
+```{r}
+set.seed(154)
+# so you can reproduce the results
+w = rnorm(200); x = cumsum(w)
+# two commands in one line
+wd = w +.2;
+xd = cumsum(wd)
+plot.ts(xd, ylim=c(-5,55), main="random walk", ylab='')
+lines(x, col=4); abline(h=0, col=4, lty=2); abline(a=0, b=.2, lty=2)
+```
+
+*Example 1.12 Signal in Noise*
+
+Many realistic models for generating time series assume an underlying signal with some consistent periodic variation, contaminated by adding a random noise. 
+
+Model:
+\[x_t = 2 \cos(2\pi\frac{15 + t}{50}) + w_t\]
+
+
+(Note that we are actually putting a function of t into the model! Not just putting it all into the noise.)
+
+Note that a sinusoidal waveform can be written as \[A cos(2 \pi \omega t + \phi)\] where A is the amplitude, $\omega$ is the frequency of oscillation and $\phi$ is a phase shift. 
+
+An additive white noise term can easily obscure the pattern! Look:
+```{r}
+cs = 2*cos(2*pi*1:500/50 + .6*pi); w = rnorm(500,0,1)
+par(mfrow=c(3,1), mar=c(3,2,2,1), cex.main=1.5)
+plot.ts(cs, main=expression(2*cos(2*pi*t/50+.6*pi)))
+plot.ts(cs+w, main=expression(2*cos(2*pi*t/50+.6*pi) + N(0,1)))
+plot.ts(cs+5*w, main=expression(2*cos(2*pi*t/50+.6*pi) + N(0,25)))
+```
+
+That's actually pretty interesting.
+
+In Chapter 4, study spectral analysis as a possible technique for detecting regular or periodic signals. *In general, authors want to emphasize the importance of simple additive models such as* \[x_t = s_t + v_t \tag{1.7}\] where $s_t$ denotes some unknown signal and $v_t$ denotes a time series taht may be white or correlated over time. Signal deterecting is *very important* in engineering and sciences. In economics, the underlying signal may be a *trend* or a seasonal component of a series. (Hmm... is that right? What if I want to find demand events? ) Models such as 1.7 above form the motivation of state-space models in Chapter 6.
+
+**Note that correlation is an essential feature of time series analysis. So, the "most useful" descriptive measures are those expressed in terms of covariance and correlation functions** (As an aside, it is just annoying because it doesn't seem like )
+
+
+
+## 1.3 Measures of Dependence
+
+These sections are math intensive and noted by hand.
+
+## 1.4 Stationary Time Series
+
+Below is the code for example 1.24 when lag is 5. You can see the estimation actually worked reasonably well in the sense that the only true correlation looks pretty big and the rest look pretty small. Note, the larger the lag, the fewer the data points you can use to estimate it.
+
+```{r}
+x = rnorm(100)
+y = lag(x, -5) + rnorm(100)
+ccf(y, x, ylab='CCovF', type='covariance')
+```
+
+## 1.5 Estimating Autocorrelation
+
+Note, these estimators are built on the premise that the series is stationary, I believe. Note that our estimator divides by n and not n-h. This guarantees that our estimator is nonnegative. Neither dividing by n nor dividing by n-h would lead to an unbiased estimator.
+
+If $\bar{x} =\frac{1}{n} \sum_{j = 1}^n x_j$ and series is stationary, then \[E(\bar{x}) = \mu\] and \[ var(\bar{x}) = \frac{1}{n} \sum_{h = -n}^n (1-\frac{|h|}{n})\gamma_x(h)\]
+
+Sample autocovariance is estimated by \[\hat{\gamma}(h) = n^{-1}\sum_{t=1}^{n-h}(x_{t+h} - \bar{x})(x_t - \bar{x})\]
+The sample autocorrelation function is estimated by 
+\[\hat{\rho}(h) = \frac{\hat{\gamma}(h)}{\hat{\gamma}(0)} \]
+
+
+*Example 1.26* A Simulated Time Series.
+
+$y_t = 5 + x_t - .7x_{t-1}$ where $x_t = -1$ or $1$ with equal probability, independent over time. Then, $\rho_y(1) = -.47 = -.7/(1+.7^2)$ and $\rho_y(h)$ is 0 for all h greater in absolute value than 1. (Of course, $\hat{\rho}_y(0) = 1 = \rho_y(0)$ as a mathematical certainty.). The 100 series sample below gets it pretty close (although the 10 serise sample does not!)
+
+Recall that autocorrelation (for stationary time series) is the linear dependence of observations $h$ steps ahead of $t$ are on observations at step $t$ for all $t$.
+
+```{r}
+set.seed(101010)
+x1 = 2*rbinom(11, 1, .5) - 1
+# simulated sequence of coin tosses
+x2 = 2*rbinom(101, 1, .5) - 1
+y1 = 5 + filter(x1, sides=1, filter=c(1,-.7))[-1]
+y2 = 5 + filter(x2, sides=1, filter=c(1,-.7))[-1]
+plot.ts(y1, type='s'); plot.ts(y2, type='s')
+# plot both series (not shown)
+c(mean(y1), mean(y2))
+# the sample means
+
+acf(y1, lag.max=4, plot=FALSE) # 1/ 10 = .32
+# Autocorrelations of series 'y1', by lag
+
+acf(y2, lag.max=4, plot=FALSE) # 1/ 100 = .1
+#Autocorrelations of series 'y2', by lag
+# Note that the sample ACF at lag zero is always 1 (Why?).
+```
+
+*Example 1.28 SOI and Recruitment Correlation Analysis*
+
+Comparing ACF of two potentially related series can be useful, as can looking at the CCF of the series. Its not clear what to conclude from these (to me, yet), but it certainly looks like there is some relationship.
+
+```{r}
+
+par(mfrow=c(3,1))
+acf(soi, 48, main="Southern Oscillation Index")
+acf(rec, 48, main="Recruitment")
+ccf(soi, rec, 48, main="SOI vs Recruitment", ylab="CCF")
+
+```
+
+*Example 1.29: Prewhitening and cross-correlation analysis*.
+
+Property 1.3 requires at least one of our series to be white noisse for the crosscorrelation asymptotic distribution to hold. This is not the case for the series below.
+
+Suppose \[x_t = 2 \cos(\frac{2 \pi t}{12})  + w_{t1}\] \[y_t = 2 \cos\left ( \frac{2 \pi}{12}(t + 5) \right ) + w_{t2}\]
+where $w_{ti}$ are iid N(0,1) over t and i. It looks like the series have cross correlation, although they are actually independent.  
+
+__(Note, interpreting this actually hinges on a very subtle understanding of independence and correlation. The series both *do* exhibit dependence on $t$. So, for many intents and purposes, the series are not "independent". However, statistically speaking, the *deterministic components* of the processes have no variance! In particular, even though t varies, it is a *deterministic time step*. Therefore, the series $x_t$ variations as a function of $t$ are *not* stochastic variations and therefore not a source of correlation. I feel like this is somewhat a failing of how we are thinking of the statistics here. More broadly, if f is some deterministic function of time and x_t = f(t) + \epsilon_t  and y_t = f(t) + \delta_t where the \epsilon and \delta are iid normals, then y_t may lead to excellent information predicting x_t but are not linearly correlated. However, if we re-imagine f(t) as our observable (which it may not be) then we can now see how x_t covaries with f(t) and will get strong correlation...)__ 
+ 
+
+```{r} 
+
+set.seed(1492)
+num=120; t=1:num
+X = ts(2*cos(2*pi*t/12) + rnorm(num), freq=12)
+Y = ts(2*cos(2*pi*(t+5)/12) + rnorm(num), freq=12)
+Yw = resid( lm(Y~ cos(2*pi*t/12) + sin(2*pi*t/12), na.action=NULL) )
+par(mfrow=c(3,2), mgp=c(1.6,.6,0), mar=c(3,3,1,1) )
+plot(X)
+plot(Y)
+acf(X,48, ylab='ACF(X)')
+acf(Y,48, ylab='ACF(Y)')
+ccf(X,Y,24, ylab='CCF(X,Y)')
+ccf(X,Yw,24, ylab='CCF(X,Yw)', ylim=c(-.6,.6))
+
+```
+
+*Example 1.30 Soil Surface Temperatrues*
+Surface temperatures on a 64 by 36 grid. The value of the temperature measured at row $s_1$ and column $s_2$ is denoted by $x_s = x_{s1, s2}$. (I think this series doesn't actually vary over time, just space)
+
+```{r}
+persp(1:64, 1:36, soiltemp, phi=25, theta=25, scale=FALSE, expand=4,
+ticktype="detailed", xlab="rows", ylab="cols", zlab="temperature")
+plot.ts(rowMeans(soiltemp), xlab="row", ylab="Average Temperature")
+```
+
+
+*Example 1.31*
+
+Calculating aCF for the process above. The fastest way to do it is with a FFT (fast Fourier transform). This is covered in Chapter 4. Have to take their word here. rs is the ACF. the rest is to tidy it up. Sampling for multidimensional processes are very strict; In some areas of application, they sample a limited number of rows or *transects* and hope these are essentially replicates of the basic underlying phenomenon of interest. 
+
+```{r}
+
+fs = Mod(fft(soiltemp-mean(soiltemp)))^2/(64*36)
+cs = Re(fft(fs, inverse=TRUE)/sqrt(64*36)) # ACovF
+rs = cs/cs[1,1]
+# ACF
+rs2 = cbind(rs[1:41,21:2], rs[1:41,1:21])
+rs3 = rbind(rs2[41:2,], rs2)
+par(mar = c(1,2.5,0,0)+.1)
+persp(-40:40, -20:20, rs3, phi=30, theta=30, expand=30, scale="FALSE",
+ticktype="detailed", xlab="row lags", ylab="column lags",
+zlab="ACF")
+```
+
+
+# Chapter 2 Time Series REgression and Exploratory Analysis
+
+Start with simple regression model:
+
+\[x_t = \beta_0 + \beta_1 z_{t1} + \cdots + \beta_q z_{tq} + w_t \] where we assume $w_t$ is iid $N(0, \sigma_w^2)$. Can fit with OLS.
+
+```{r}
+summary(fit <- lm(chicken~time(chicken), na.action=NULL))
+plot(chicken, ylab="cents per pound")
+abline(fit)
+# add the fitted line
+```
+
+*Example 2.2* Looking at mortality vs temperature and pollutants in Los Angeles
+
+
+```{r}
+par(mfrow=c(3,1)) # plot the data
+plot(cmort, main="Cardiovascular Mortality", xlab="", ylab="")
+plot(tempr, main="Temperature", xlab="", ylab="")
+plot(part, main="Particulates", xlab="", ylab="")
+dev.new()
+# open a new graphic device
+ts.plot(cmort,tempr,part, col=1:3) # all on same plot (not shown)
+dev.new()
+pairs(cbind(Mortality=cmort, Temperature=tempr, Particulates=part))
+temp = tempr-mean(tempr) # center temperature
+temp2 = temp^2
+trend = time(cmort)
+# time
+fit = lm(cmort~ trend + temp + temp2 + part, na.action=NULL)
+summary(fit)
+# regression results
+summary(aov(fit))
+# ANOVA table
+# (compare to next line)
+summary(aov(lm(cmort~cbind(trend, temp, temp2, part)))) # Table 2.1
+num = length(cmort)
+# sample size
+AIC(fit)/num - log(2*pi) # AIC
+BIC(fit)/num - log(2*pi) # BIC
+(AICc = log(sum(resid(fit)^2)/num) + (num+5)/(num-5-2)) # AICc
+```
+
+
+*Example 2.3* Regression with Lagged Variables
+
+```{r}
+fish = ts.intersect(rec, soiL6=lag(soi,-6), dframe=TRUE)
+summary(fit1 <- lm(rec~soiL6, data=fish, na.action=NULL))
+
+# can make aligning the lagged series easier with dynlm
+p_load(dynlm)
+summary(fit2 <- dynlm(rec~ L(soi,6)))
+#fit2 is similar to fit1 but time series attributes are retained without any additional commands
+```
+
+### 2.2 Exploratory Data Analysis
+*Differencing Chicken Prices*
+```{r}
+fit = lm(chicken~time(chicken), na.action=NULL) # regress chicken on time
+par(mfrow=c(2,1))
+plot(resid(fit), type="o", main="detrended")
+plot(diff(chicken), type="o", main="first difference")
+par(mfrow=c(3,1)) # plot ACFs
+acf(chicken, 48, main="chicken")
+acf(resid(fit), 48, main="detrended")
+acf(diff(chicken), 48, main="first difference")
+```
+
+*Differenced series exhibits annual cycle that was obscured in the original or detrended data.*
+
+Example 2.6 Differencing Global Temperature
+
+```{r}
+par(mfrow=c(2,1))
+plot(diff(globtemp), type="o")
+mean(diff(globtemp)) # drift estimate = .008
+acf(diff(gtemp), 48)
+```
+
+
+*Example 2.7 Paleoclimatic Glacial Varves*
+
+Later show this is an example of a "long-memory" process. Explore this in Chapter 5. For now, use log transformation to make the amplitude smoother across time, effectively stationarizing the autocorrelation. (I guess if this works well, you can destationarize it by unlogging the autocorrelation and predicting in that case!)
+
+```{r}
+
+par(mfrow=c(2,1))
+plot(varve, main="varve", ylab="")
+plot(log(varve), main="log(varve)", ylab="" )
+```
+
+
+*Example 2.8: Scatterplot Matrices, SOI and Recruitment*
+
+Idea is to plot $x_t$ vs $x_{t-h}$ or $y_t$ vs $x_{t-h}$ to look at linearities and nonlinearities that the eye can detect in the lagged series.
+
+The red lines superimposed on the scatterplot are locally weighted scatterplot smoothing (lowess) lines. (i.e. LOcally WEighted Scatterplot Smoothing =  lowess.) Lowess is a robust method for fitting local regression.
+
+**When the lowess lines are straight, correlation can be meaningfully interpreted. When the lowess lines are not straight, the correlation cannot be meaningfully interpreted.**
+
+For example, SOI_t vs its lags looks pretty straight. So, we can interpret autocorrelation. However, Recruitment vs lags of SOI looks very curved. So, we shouldn't interpret cross-correlations meaningfully.
+
+```{r}
+lag1.plot(soi, 12) #soi_t vs soi_{t-h} up to h = 12
+lag2.plot(soi, rec, 8) # rec_t on y, soi_{t-h} on x up to h = 8
+```
+
+*Example 2.9* Accounting for nonlinearities
+
+In example 2.3 did $R_t = \beta_0 + \beta_1 S_{t-6} + w_t$
+
+Since we see the nonlinearities in cross-correlation from 2.8 above, now we add the dummy variable
+$D_t = 1(S_t \ge 0)$ and estimate the relationship \[R_t = \beta_0 + \beta_1 S_{t-6} + \beta_2 D_{t-6} + \beta_3 D_{t-6} S_{t-6} + w_t\] That is, we have
+
+\[ R_t = \begin{cases} \beta_0 + \beta_1S_{t-6} + w_t  \text{ if } S_{t-6} < 0,\\ \beta_0 + \beta_2 + (\beta_1 + \beta_3) S_{t-6} + w_t \text{ if } S_{t-6} \ge 0\end{cases}  \]
+
+
+```{r}
+dummy = ifelse(soi<0, 0, 1)
+fish = ts.intersect(rec, soiL6=lag(soi,-6), dL6=lag(dummy,-6), dframe=TRUE)
+summary(fit <- lm(rec~ soiL6*dL6, data=fish, na.action=NULL))
+attach(fish)
+plot(soiL6, rec)
+lines(lowess(soiL6, rec), col=4, lwd=2)
+points(soiL6, fitted(fit), pch='+', col=2)
+plot(resid(fit)) # not shown ...
+acf(resid(fit))
+# ... but obviously not noise
+```
+
+Note that the residuals very clearly display autocorrelation. So, our modeling assumptions would appear to be incorrect, still.
+
+
+*Example 2.10 Using Regression to Discover a Signal in Noise*. We are looking for cyclic or periodic signals in time series here. 
+
+
+In previous example, generated 500 observatinos from the model \[ x_t = A cos(2 \pi \omega t + \phi) + w_t\] where $\omega = 1/50, A = 2, \phi = .6 \pi$ and $\sigma_w = 5$. Assume that $\omega = 1/50$,  the *frequency of oscillation* is **known** but that A and \phi are unknown. (In my problem, the frequency of oscillation is known and is one year.)
+
+Use the trig identity \[ A Cos (2 \pi \omega t + \phi ) = \beta_1 \cos(2 \pi \omega t) + \beta_2 \sin (2 \pi \omega t)  \] where $\beta_1 = A \cos(\phi)$ and $\beta_2 = -A \sin(\phi)$ and then can run the regression \[ x_t = \beta_1 \cos(2\pi t/50) + \beta_2 \sin(2 \pi t/50) + w_t\]
+
+```{r}
+set.seed(90210)
+# so you can reproduce these results
+x = 2*cos(2*pi*1:500/50 + .6*pi) + rnorm(500,0,5)
+z1 = cos(2*pi*1:500/50)
+z2 = sin(2*pi*1:500/50)
+summary(fit <- lm(x~0+z1+z2)) # zero to exclude the intercept
+par(mfrow=c(2,1))
+plot.ts(x)
+plot.ts(x, col=8, ylab=expression(hat(x)))
+lines(fitted(fit), col=2)
+```
+
+Discuss this in more detail in Chapter 4!!!
+
+### 2.3 Smoothing in the Time Series Context
+
+In example 1.9 discussed using a moving average to smooth white noise. Useful for discovering long-term trend and seasonal components (???).
+\[m_t = \sum_{j=-k}^k a_j x_{t-j} \] with $a_j = a_{-j}$ and $\sum_{j = -k}^k a_j = 1$ is a *symmetric moving average* of the data.
+
+*Example 2.11 Moving Average Smoother.*
+
+```{r, eval =FALSE}
+wgts = c(.5, rep(1,11), .5)/12
+soif = filter(soi, sides=2, filter=wgts)
+plot(soi)
+lines(soif, lwd=2, col=4)
+par(fig = c(.65, 1, .65, 1), new = TRUE) # the insert
+nwgts = c(rep(0,20), wgts, rep(0,20))
+plot(nwgts, type="l", ylim = c(-.02,.1), xaxt='n', yaxt='n', ann=FALSE)
+```
+
+*Example 2.12 Kernel Smoothing*
+
+`ksmooth` makes it so that the kernels are scaled so that their quartiles are plus or minus .25\*bandwidth. Does the Nadarya-Watson estimator. bandwidth = 1 smoothes over the year (we've seen this).
+
+**Note that the moving average smoother is a boxy way of smoothing in the following sense: it takes everything within the moving average window into account and has no weight for anything out of it. In contrast, the (exponential) kernel smoother is a bell curve of smoothing in the following sense: all points get incorporated in, just the farther away they are, the less the effect matters.**
+
+```{r, eval = FALSE}
+plot(soi)
+lines(ksmooth(time(soi), soi, "normal", bandwidth=1), lwd=2, col=4)
+par(fig = c(.65, 1, .65, 1), new = TRUE) # the insert
+gauss = function(x) { 1/sqrt(2*pi) * exp(-(x^2)/2) }
+x = seq(from = -3, to = 3, by = 0.001)
+plot(x, gauss(x), type ="l", ylim=c(-.02,.45), xaxt='n', yaxt='n', ann=FALSE)
+```
+
+*Example 2.13 Lowess*
+
+Nearest neighbor regression. Technique is based on k-nearest neighbors regression. Idea: you use $\set{x_{t-k/2}, ..., x_t, ..., x_{t+k/2}}$ to predict $x_t$ via regression and then set $m_t = \hat{x}_t$. The larger k, the smoother it will be. (This is the default smoothing in ggplot2! for `geom_smooth()`). Recall that the SOI records changes in air pressure, which is related to sea surface temperatures in the central Pacific Ocean. The pacific warms every 3-7 years due to the El Nino effect. Dates are 1950 to 1985. This site describes it better than the textbook: http://www.bom.gov.au/climate/enso/history/ln-2010-12/SOI-what.shtml#:~:text=The%20Southern%20Oscillation%20Index%20(SOI)%20is%20a%20measure%20of%20the,impacts%20on%20the%20Australian%20region. The SOI measures teh difference between the surface air pressure in Tahiti and Darwin Australia. The pattern is best respresented by monthly or longer averages as daily or weekly SOI values can fluctuate markedly due to short-lived day-to-day weather patterns. Sustained postiive indicate La Nina, whereas sustained negative below -8 indicate an El Nino. Prolonged periods of negative SOI values coincide with abnormally warm ocean waters across the eastern tropical Pacific. The warm is typical of El Nino. The cold (with its positive SOI values) indicate La Nina episodes.
+
+So I guess the downward trend in this series *is* consistent with average increases in oceanic temperature. Can also check here: https://www.ncdc.noaa.gov/teleconnections/enso/indicators/soi/. I don't know how safe it is to conclude temperature things from this trend though. I don't understand the relationship completely between temperature and pressure differences.
+
+```{r}
+plot(soi)
+lines(lowess(soi, f=.05), lwd=2, col=4)
+# El Nino cycle
+lines(lowess(soi), lty=2, lwd=2, col=2)
+# trend (with default span)
+
+```
+
+*Example 2.14 Smoothing Splines*
+
+$x_t = m_t + w_t$ where $m_t = \beta_0 + \beta_1 t + \beta_2 t^2 + \beta_3 t^3$. Extend to splines by dividing $t = 1, ..., n$ into k intervals: $[t_0 = 1, t_1], [t_1 + 1, t_2], ..., [t_{k-1} + 1, t_k = n]$. the values $t_0, t_1, ..., t_k$ are called knots. If fit a (typically cubic) polynomial into each intervall, call it *(cubic) splines*.
+
+Smoothing splines are similar to cubic splines, but they add a penalty term that penalizes more jagged changes.
+
+
+R's smoothing parameter is called `spar`. It is monotonically related to $\lambda$. The larger $\lambda$ the smoother the fit.
+```{r}
+plot(soi)
+lines(smooth.spline(time(soi), soi, spar=.5), lwd=2, col=4)
+lines(smooth.spline(time(soi), soi, spar= 1), lty=2, lwd=2, col=2)
+?smooth.splilne
+```
+
+**Example 2.15 Smoothing One Series as a Function of Another**
+
+Here, smooth the scatterplot of two contemporaneously measured time series, mortality as a function of temperature. Mortality $M_t$, temperature $T_t$
+
+
+```{r}
+plot(tempr, cmort, xlab="Temperature", ylab="Mortality")
+lines(lowess(tempr, cmort))
+```
+
+## Chapter 3 ARIMA Models
+
+- ARMA models proposed by Whittle 1951
+- ARIMA Models Proposed by Box and Jenkins 1970
+
+
+
+### 3.1 ARMA Models
+
+Can assess forecastability of a time series by looking at its **autocorrelation function** and the **lagged scatterplot matrices.**
+
+*Example 3.1 AR(1) Process*
+
+\[E(x_t) = 0\]
+\[ \gamma(h) = \frac{\sigma_w^2 \phi^h}{1 - \phi^2}\]
+\[ \rho(h) = \gamma(h)/\gamma(0) = \phi^h \]
+
+*Example 3.2 Sample Path of an AR(1) Process*
+
+
+
+```{r}
+par(mfrow=c(2,1))
+plot(arima.sim(list(order=c(1,0,0), ar=.9), n=100), ylab="x",
+main=(expression(AR(1)~~~phi==+.9)))
+plot(arima.sim(list(order=c(1,0,0), ar=-.9), n=100), ylab="x",
+main=(expression(AR(1)~~~phi==-.9)))
+```
+
+
+Note that with $\phi = .9$ the autocorrelation decays steadily. With $\phi = -.9$ the autocorrelatoin oscillates as it decays.
+
+*Example 3.3 Explosive AR Models are Not Causal*
+
+Note that a random walk has $x_t = x_{t-1} + w_t$ would be an $AR(1)$ process with $\phi = 1$, except AR(1) are not defined for $\phi = 1$ since they are not stationary here. Note, we can find a stationary model for $|\phi| > 1$ however. In particular, for $k>0$, note that
+$x_t = \phi^{-k}x_{t + k} - \sum_{j = 1}^{k-1} \phi^{-j}w_{t+j}$
+So \[x_t = -\sum_{j=1}^\infty \phi^{-j} w_{t+j} \] This is actually stationary! But it is future dependent and therefore *not causal*.
+
+*Example 3.5 Plotting MA Models*
+
+Moving Average with positive coefficient seems to make it sticky within plus or -1 either step, not "smooth" like the AR(1) process with positive coefficient. When it is negative, it really just jumps back and forth across 0. We don't see the same amplitude oscillation with the MA(1) process with negative coefficient as we do with the AR(1) process with negative coefficient.
+
+```{r}
+par(mfrow = c(2,1))
+plot(arima.sim(list(order=c(0,0,1), ma=.9), n=100), ylab="x",
+main=(expression(MA(1)~~~theta==+.5)))
+plot(arima.sim(list(order=c(0,0,1), ma=-.9), n=100), ylab="x",
+main=(expression(MA(1)~~~theta==-.5)))
+```
+
+
+*Example 3.7 Parameter Redundancy*
+
+**This is an important example**. Note that if $x_t = w_t$--that is, $x_t$ is a whie noise process--then its also true that \[x_t = .5 x_{t-1} - .5w_{t-1} + w_t\] whick **looks like** an ARMA(1,1) model. We have hidden the underlying white noise model in an over-parameterized model. Indeed, running an ARMA(1,1) regression on 150 normal r.v. gives is -1 and 1 for coefficients!
+
+```{r}
+set.seed(8675309) # Jenny, I got your number
+x = rnorm(150, mean=5) # generate iid N(5,1)s
+arima(x, order=c(1,0,1)) # estimation
+```
+To overcome the overparameterization, we require some additional restrictions on the model parameters.
+
+As summary, the problems we have seen so far are as follows.
+1. parameter redundant models
+2. stationary AR models that depend on the future
+3. MA models that are not unique
+
+
+*Example 3.8*
+
+Model starts as \[x_t = .4x_{t-1} + .45x_{t-2} + w_t + w_{t-1} + .25 w_{t-2}\] or in operator form \[(1 - .4B - .45B^2)x_t = (1 + B + .25B^2) w_t\] At first, $x_t$ appears to be an ARMA(2,2) process, but the shared roots of \[\phi(z) = (1 + .5z)(1 - .9z)\] and \[\theta(z) = (1 + .5z)^2\] have a common factor that can be canceled. Simplifies to
+\[x_t = .9 x_{t-1} + .5 w_{t-1} + w_t\]
+
+By property 3.1, we can convert the model to a linear process by solving \[ \phi(z) \psi(z) = \theta(z)\] or \[(1 - .9z) (1 + \psi_1 z + \psi_2 z^2 + \cdots + \psi_j z_j + \cdots) = 1 + .5 z \] so \[x_t = w_t + 1.4 \sum_{j = 1}^\infty .9^{j-1} w_{t-j}\]
+
+(i.e. solve $\psi(z)\phi(z) = \theta(z)$)
+
+R will calculate the values of $\psi$ series with the following code!
+```{r}
+ARMAtoMA(ar = .9, ma = .5, 10) # first 10 psi-weights
+
+```
+To convert the model to its invertible form, we set $\pi(z)\theta(z) = \phi(z)$ and solve for $\pi(z)$. (The fact that $\theta_1 = .5$ ensures its  roots are outside the unit circle. Rather than $\theta_1 = 2$. So 
+\[ (1 + .5z) (1 + \pi_1 z + \pi_2 z^2 + \pi_3 z^3 + \cdots ) = 1 - .9z\] and therefore $\pi_j = (-1)^j 1.4 (.5)^{j-1}$ for $j \ge 1$. So \[x_t = 1.4 \sum_{j=1}^\infty (-.5)^{j-1}x_{t-j} + w_t\]
+
+To calculate the sequence with R:
+
+```{r}
+ARMAtoMA(ar = -.5, ma = -.9, 10)
+# first 10 pi-weights
+#[1] -1.400 .700 -.350 .175 -.087 .044 -.022 .011 -.006 .003
+```
+
+
+*Example 3.11* An AR(2) with Complex Roots
+
+\[x_t = 1.5 x_{t-1} - .75x_{t-2} + w_t \] with $\sigma_w^2= 1$. The autoregressive polynomial for this model is $\phi(z)=1 - 1.5z + .75z^2$ This is because $\phi(B) = 1 - 1.5B + .75B^2$ and $\theta(B) = 1$ and they therefore have no common roots. (It's much easier to analyze if just an AR or just an MA). The roots are $1 \pm i/\sqrt{3}$. So $\theta = \pi/6$ and therefore we can convert the angle to cycles per unit time by diving by $2 \pi$, which leaves us with $1/12$ cyles per unit time. That is, 1 autocorrelation cycle every 12 time steps. Note that the angle $\theta$ (restricted to be within $(-\pi, \pi]$ is often called the arg(z) or the argument of z. $1/(\theta/2\pi)=2 \pi/ \theta$ is how many time steps to a cycle.
+
+```{r}
+# Calculating the roots in R
+z = c(1,-1.5,.75)
+(a = polyroot(z)[1])
+#[1] 1+0.57735i
+arg = Arg(a)/(2*pi)
+1/arg
+#[1] 12
+# Arg(a) is angle theta
+
+set.seed(8675309)
+ar2 = arima.sim(list(order=c(2,0,0), ar=c(1.5,-.75)), n = 144) #i.e. AR(2) process
+plot(ar2, axes=FALSE, xlab="Time")
+axis(2); axis(1, at=seq(0,144,by=12)); box()
+abline(v=seq(0,144,by=12), lty=2)
+  
+ACF = ARMAacf(ar=c(1.5,-.75), ma=0, 50)
+plot(ACF, type="h", xlab="lag")
+abline(h=0)
+```
+
+*Example 3.12* The $\psi$-weights for an ARMA Model
+
+$x_t = .9x_{t-1} + .5w_{t-1} + w_t$
+
+The $\psi$-weights are the weights for the function in *causal* form.
+
+The R code below generate the first 50 $\psi$-weights. We know from solving it by hand that $\psi_1 =1.4$, $\psi_j = 1.4(.9)^{j-1}$ for $j \ge 2$.
+
+```{r}
+ARMAtoMA(ar=.9, ma=.5, 50) # for a list
+plot(ARMAtoMA(ar=.9, ma=.5, 50)) # for a graph
+
+```
+
+### 3.3 Autocorrelation and Partial Autocorrelation
+
+*Example 3.16 The PACF of an AR(p)*
+
+```{r}
+
+ACF = ARMAacf(ar=c(1.5,-.75), ma=0, 24)[-1]
+PACF = ARMAacf(ar=c(1.5,-.75), ma=0, 24, pacf=TRUE)
+par(mfrow=c(1,2))
+plot(ACF, type="h", xlab="lag", ylim=c(-.8,1)); abline(h=0)
+plot(PACF, type="h", xlab="lag", ylim=c(-.8,1)); abline(h=0)
+```
+
+*Example 3.18: Preliminary Analysis of the Recruitment Series*
+
+Below shows the ACF and PACF for the recruitment series. These two are **consistent with** an AR(2) model: the ACF tails off and the PACF essentially dies after 2 (although there are a few slightly significant ones down the line). They run the regression for AR(2) for 
+\[x_t = \phi_0 + \phi_1 x_{t-1} + \phi_2 x_{t-2} + w_t \] Estimates are below.
+
+```{r}
+library(astsa)
+acf2(rec, 48)
+# will produce values and a graphic
+(regr = ar.ols(rec, order=2, demean=FALSE, intercept=TRUE))
+regr$asy.se.coef # standard errors of the estimates
+```
+
+### 3.4 Forecasting
+
+Assume throughout this section that $\{x_t\}$ is stationary and that the model parameters *are known*.
+
+
+*Example 3.24 Forecasting An ARMA(1,1) Series*
+
+This is an excellent example. It shows how all the pieces are coming together. The model has
+$x_{n+1} = \phi x_n + w_{n+1} + \theta w_n$. So, 
+\[\tilde{x}_{n+1}^n = \phi x_n + 0 + \theta \tilde{w}_n^n \] 
+\[\tilde{x}_{n+m}^n = \phi \tilde{x}^n_{n+m-1} \text{ for } m\ge 2\]
+
+So, the AR(1) part perpetuates into the forecasts forever. The MA(q) part is no longer explicitly inlucded after step (q) although the calculatable values of the white noise up to time $n$ are incorporated into all forecasts through recursion, with exponential die off in the old terms because of the geometric term on the AR(p) process. 
+
+To calculate the historical forecasts of white noise terms, just use $w_t = x_t - \phi x_{t-1} - \theta w_{t-1}$ for $t = 1, \dots, n$ and initial conditions $\tilde{w}_0^n = 0$ and $x_0 = 0$. Iterate the errors forward in time so that \[ \tilde{w}_t^n = x_t - \phi x_{t-1} - \theta \tilde{w}_{t-1}^n, \text{ } t = 1, \dots, n\]. Calculate the forecast variance using infinite MA representation of the process; i.e. the variance is \[P_{n+m}^n := E \left [ (x_{n+m} - \tilde{x}_{n+m})^2 \right ] = \sigma_w^2 \sum_{j=0}^{m-1} \psi_j^2\] when $x_t = \sum_{j = 0} ^\infty \psi_j w_{t-j} = \psi(B)w_t$ is *causal* representation of $x_t$ process. For an ARMA(1,1) process, we know that the $\psi$-weights satisfy $\psi_j = (\phi + \theta) \phi^{j-1}$ for all $j\ge 1$. So, \[P_{n+m}^n = \sigma_w^2 \left[ 1 + (\phi + \theta)^2 \sum_{j=1}^{m-1} \phi^{2(j-1)} \right ] = \sigma_w^2 \left [ 1 + \frac{(\phi + \theta)^2(1 - \phi^{2(m-1)})}{1 -\phi^2}\right ] \]
+Recall that
+
+
+
+*Example 3.25 Forecasting the Recruitment Series*
+
+Fit an AR(2) model (so don't have to worry about MA terms on the back). The AR model is $x_t = 6.74 + 1.35 x_{t-1} - .46 x_{t-2} + w_t$ for $t = 3, 4, ..., 453$. Therefore, \[\tilde{x}_{n+m}^n = \begin{cases} 6.74 + 1.35 x_{n + m -1}^n - .46 \tilde{x}_{n+m-2}^n \text{ if } m > 0\\ x_{n+m} \text{ if } -n < m \le 0 \end{cases}\] We have $\hat{\sigma}_w^2 = 89.72$ and for an AR(2) $\begin{cases} \psi_0 = 1 \\ \psi_1 =  \phi_1 \\ \psi_j = \theta_1 \psi_{j-1} + \phi_2 \psi_{j-2} \text{ for } j \ge 2\end{cases} $ So since $P_{n+m^n = \sigma_w^2 \sum_{j=0}^{m-1} \psi_j^2$ we have 
+
+
+```{r}
+library(pacman)
+regr = ar.ols(rec, order=2, demean=FALSE, intercept=TRUE)
+fore = predict(regr, n.ahead=24)
+ts.plot(rec, fore$pred, col=1:2, xlim=c(1980,1990), ylab="Recruitment")
+U = fore$pred+fore$se; L = fore$pred-fore$se
+xx = c(time(U), rev(time(U))); yy = c(L, rev(U))
+polygon(xx, yy, border = 8, col = gray(.6, alpha = .2))
+lines(fore$pred, type="p", col=2)
+```
+
+
+
+*Example 3.26 Backcasting an ARMA(1,1)*
+
+Note, backcasting can be done by relabeling the series $\{x_t\}^n$ to $\{x_{n-t+1}\}^n$. 
+
+\[x_t = \phi x_{t-1} + \theta w_{t-1} + w_t\] Call this the *forward model.*The process can equivalentlty be written by the *backward model* \[x_t = \phi x_{t+1} + \theta v_{t+1} + v_t \] where $v_t$ is a stationary white noise process (they shouldn't be the same $\phi$ and $\theta$). We write \[x_t = \sum_{j=0}^\infty \psi_j v_{t+j} \] where $\psi_0=1$. So $x_t$ is uncorrelated with $\{v_{t-1}, v_{t-2}, \dots\}$. (Hmm... so, yes. it is very important that we think of it with this different model, because $x_t$ is correlated with the $w_{t-1}, w_{t-2}, \dots$). Given data $\{x_1, x_2, \dots, x_n \}$ put $v_n^n = E(v_n|x_1, \dots, x_n)$ and then iterate backward. Put $\tilde{v}_n^n = 0$ as an initial approximation and then generate the errors backward \[\tilde{v}_t^n = x_t - \phi x_{t+1} - \theta \tilde{v}_{t+1}^n \text{ } t = (n-1), (n-2), \dots, 1\] Then
+\[\tilde{x}_0^n = \phi x_1 + \theta \tilde{v}_1^n + \tilde{v}_0^n = \phi x_1 + \theta \tilde{v}_1^n\] because $\tilde{v}_t^n=0$ for $t\le0$ (i.e. our best guess for past white noise is 0 when backcasting). Then $\tilde{x}_{1-m}^n = \phi \tilde{x}_{2-m}^n$ for $m = 2,3, \dots$
+
+All we have to do with R is reverse the data and predict. the `rev` function does that for us. We run it *once before* the analysis and *once after*!
+
+```{r}
+set.seed(90210)
+x= arima.sim(list(order = c(1,0,1), ar =.9, ma=.5), n = 100)
+xr= rev(x) # xr is the reversed data *only difference with forecasting*
+pxr= predict(arima(xr, order=c(1,0,1)), 10)# predict the reversed data
+pxrp = rev(pxr$pred) # reorder the predictors (for plotting)
+pxrse = rev(pxr$se) #reordering the se for forecast interval in plot
+nx= ts(c(pxrp, x), start=-9) # attach the backcasts to the data
+plot(nx, ylab=expression(X[~t]), main='Backcasting')
+U = nx[1:10] + pxrse; L = nx[1:10] - pxrse
+xx = c(-9:0, 0:-9); yy = c(L, rev(U))
+polygon(xx, yy, border = 8, col = gray(0.6, alpha = 0.2))
+lines(-9:0, nx[1:10], col=2, type='o')
+```
+
+
+### 3.5 Estimation
+
+Start with a causal and invertible Gaussian ARMA(p,q) process where (initially) p and q are assumed *known*. Goal is to estimate the coefficients on the series.
+
+*Example 3.28 Yule-Walker Estimation of the Recruitment Series*
+
+Note that the function is ar.yw and the order is 2, because fit an AR(2) model using Yule-Walker (i.e. Method of Moments) coefficients. Note that these coefficients are nearly identical to the values in Example 3.18, where ran OLS. This is because AR(p) models are linear models and the Yule-Walker estimator is essentially least squares estimators. Won't work as well for MA or ARMA models.
+
+```{r}
+rec.yw = ar.yw(rec, order=2)
+rec.yw$x.mean
+# = 62.26 (mean estimate)
+rec.yw$ar
+# = 1.33, -.44 (coefficient estimates)
+sqrt(diag(rec.yw$asy.var.coef)) # = .04, .04 (standard errors)
+rec.yw$var.pred # = 94.80 (error variance estimate)
+
+```
+
+
+```{r}
+rec.pr = predict(rec.yw, n.ahead=24)
+ts.plot(rec, rec.pr$pred, col=1:2)
+lines(rec.pr$pred + rec.pr$se, col=4, lty=2)
+lines(rec.pr$pred - rec.pr$se, col=4, lty=2)
+```
+
+
+*Example 3.29 Method of Moments Estimation for an MA(1)*
+
+
+Even though $|\rho(1)| \lt 1/2$ for an invertible estimator, it may be that $|\hat{\rho}|\gt 1/2$ because its an estimator. See this belowe.
+
+
+```{r}
+set.seed(2)
+ma1 = arima.sim(list(order = c(0,0,1), ma = 0.9), n = 50)
+acf(ma1, plot=FALSE)[1] # = .507 (lag 1 sample ACF)
+```
+
+
+
+*Example 3.31 MLE for the Recruitment Series*
+
+Compare with Example 3.18 where fit with OLS and Example 3.28 where fit with Yule-Walker (method of moments).
+```{r}
+rec.mle = ar.mle(rec, order=2)
+rec.mle$x.mean # 62.26
+rec.mle$ar # 1.35, -.46
+sqrt(diag(rec.mle$asy.var.coef))
+rec.mle$var.pred #89.34
+```
+
+
+
+*Example 3.33 Fitting the Glacial Varve Series*
+
+Note that the ACF looks like only first one is significant and the PACF telescope off. This suggests MA(1) may be reasonable. 
+
+**Question: Are ACF and PACF plots reasonable on nonstationary data? Cause the last two presentations I watched showed ACF plots but it wasn't clear that the data was stationary before hand.**
+
+Note that these plots were done on pre-transformed data. I.e. The data are transformed into \[y_t = \nabla log(x_t)\] since the $\{y_t\}$ are stationary but the $x_t$ aren't.
+
+Below 
+
+```{r}
+x = diff(log(varve))
+# Evaluate Sc on a Grid
+c(0) -> w -> z
+c() -> Sc -> Sz -> Szw
+num = length(x)
+th = seq(-.3,-.94,-.01)
+for (p in 1:length(th)){
+  for (i in 2:num){ 
+    w[i] = x[i]-th[p]*w[i-1] 
+  }
+  Sc[p] = sum(w^2)
+}
+plot(th, Sc, type="l", ylab=expression(S[c](theta)), 
+     xlab=expression(theta), lwd=2, main = "Iterations on Gauss Newton Until Estimator (of MA(1) coefficent) Convergence")
+# Gauss-Newton Estimation
+r = acf(x, lag=1, plot=FALSE)$acf[-1]
+rstart = (1-sqrt(1-4*(r^2)))/(2*r)
+# from (3.105)
+c(0) -> w -> z
+c() -> Sc -> Sz -> Szw -> para
+niter = 12
+para[1] = rstart
+for (p in 1:niter){
+  for (i in 2:num){ 
+    w[i] = x[i]-para[p]*w[i-1]
+    z[i] = w[i-1]-para[p]*z[i-1]
+  }
+  Sc[p] = sum(w^2)
+  Sz[p] = sum(z^2)
+  Szw[p] = sum(z*w)
+  para[p+1] = para[p] + Szw[p]/Sz[p] 
+}
+round(cbind(iteration=0:(niter-1), thetahat=para[1:niter] , Sc , Sz ), 3)
+abline(v = para[1:12], lty=2)
+points(para[1:12], Sc[1:12], pch=16)
+
+
+```
+
+
+*Example 3.36 Bootstrapping an AR(1)*
+
+Model is $x_t = \mu + \phi(x_{t-1} - \mu) + w_t$ where $\mu = 50$, $\phi = .95$ and $w_t$ are iid double exponential with location 0 and scale parameter $\beta = 2$. Simulate 100 points from the data below. It *looks like* the data is nonsationary because of the errors, but in actuallity, the data are stationary just with a funky unobservable noise process. 
+```{r}
+set.seed(101010)
+e = rexp(150, rate=.5); u = runif(150,-1,1); de = e*sign(u)
+dex = 50 + arima.sim(n=100, list(ar=.95), innov=de, n.start=50)
+plot.ts(dex, type='o', ylab=expression(X[~t]))
+fit = ar.yw(dex, order=1)
+round(cbind(fit$x.mean, fit$ar, fit$var.pred), 2)
+```
+Obtain the Yule-Walker estimate. (Recall that Yule-Walker is efficient for AR(1) processes, so can do that. Otherwise should go with MLE? Or, if we just care about the value and not the confidence intervals, I guess it doesn't really matter what we fit?) 
+
+Creating the sample distribution and compare it to the asymptotic distribution. The asymptotic distribution is a poor fit. However, the bootstrap distribution does really great.
+
+The bootstrap resampling is done over the "innovations;" that is, the difference between the one-step ahead predictions and the true values. So you resample the innovations to generate the next data points, given your original estimates. Then you re-estimate your coefficients and the variance with each step.
+
+b/c \[x_t = x_t^{t-1} + \epsilon_t = \mu + \phi(x_{t-1} - \mu) + \epsilon_t\] where innovations $\epsilon_t$ are defined by
+\[\epsilon_t := x_t - x_{t}^{t-1} \] and $x_t^{t-1}$ are the one-step ahead predictions given data $x_1, \dots, x_{t-1}$
+
+```{r}
+set.seed(111)
+phi.yw = rep(NA, 1000)
+for (i in 1:1000){
+  e = rexp(150, rate=.5); u = runif(150,-1,1); de = e*sign(u)
+  x = 50 + arima.sim(n=100,list(ar=.95), innov=de, n.start=50)
+  phi.yw[i] = ar.yw(x, order=1)$ar
+}
+
+set.seed(666) #not that 666
+fit = ar.yw(dex, order=1) #assumes the data were retained
+m = fit$x.mean # estimate of mean
+phi = fit$ar #estimate of phi
+nboot = 500 #number of bootstrap replicates
+resids = fit$resid[-1] # the 99 innovations
+
+x.star = dex # initialize x*
+phi.star.yw = rep(NA, nboot)
+# Bootstrap
+for (i in 1:nboot) {
+  resid.star = sample(resids, replace=TRUE)
+  for (t in 1:99){ 
+    x.star[t+1] = m + phi*(x.star[t]-m) + resid.star[t] 
+  }
+  phi.star.yw[i] = ar.yw(x.star, order=1)$ar
+}
+
+# Picture
+culer = rgb(.5,.7,1,.5)
+hist(phi.star.yw, 15, main="", prob=TRUE, xlim=c(.65,1.05), ylim=c(0,14),
+  col=culer, xlab=expression(hat(phi)))
+lines(density(phi.yw, bw=.02), lwd=2) # from previous simulation
+u = seq(.75, 1.1, by=.001) # normal approximation
+lines(u, dnorm(u, mean=.96, sd=.03), lty=2, lwd=2)
+legend(.65, 14, legend=c('true distribution', 'bootstrap distribution',
+  'normal approximation'), bty='n', lty=c(1,0,2), lwd=c(2,0,2),
+  col=1, pch=c(NA,22,NA), pt.bg=c(NA,culer,NA), pt.cex=2.5)
+```
+
+### 3.6 Integrated Models for Nonstationary Data
+
+
+ARIMA models are nonstationary. Both the theoretical and computational aspects of the problem are best handled via state-space models. Discuss state-space models in Chapter 6.
+
+
+*Example 3.38 IMA(1,1) and EWMA*
+
+EWMA = exponentially weighted moving averages. IMA(1,1) = ARIMA(0,1,1) is a once-integrated MA(1) process.
+
+$x_t = x_{t-1} + w_t - \lambda w_{t-1}$
+
+Can show for this process, truncated forecasts are \[\tilde{x}_{n+1}^n = (1 - \lambda) x_n + \lambda \tilde{x}_n^{n-1},\text{ } n \ge 1\]
+which is just a simple linear combination of yesterday's prediction and yesterday's true value. 
+
+This is very easy to forecast with. Some make it too easy by not verifying or justifying the process being IMA(1,1) when applying it and choosing $\lambda$ arbitrarily, not estimating it. (e.g. calibrating?) Lambda is called the smoothing paramter, the larger lambda is (up to 1), the smoother the function is
+
+```{r}
+
+?arima
+?predict.Arima #sarima and sarima.for are wrappers for these R scripts
+
+set.seed(666)
+x = arima.sim(list(order = c(0,1,1), ma = -0.8), n = 100)
+(x.ima = HoltWinters(x, beta=FALSE, gamma=FALSE)) # α below is 1 − λ
+#Smoothing parameter: alpha:
+# 0.1663072
+plot(x.ima)
+```
+
+
+
+### 3.7 Building ARIMA Models
+
+The basic steps are as follows
+1. Plot the data
+  - create a time plot and inspect it for anomalies
+  - if variance grows with time, use variance stabilizing transformations
+    - Box-Cox class of power transformations can be employed
+    - log change is recommended for small percentage changes.
+      *Will probably want to try this one for my data*
+2. Possibly transform the data
+  - see above
+3. Identify the dependence orders of the model
+  - want to identify
+    a. order of differencing d
+      - this should look at first
+      - time plot should suggest whether any differencing is needed
+      - don't overdifference, as it may introduce dependence where non existed
+        - e.g. $x_t = w_t$ is serially uncorrelated but $\nabla x_t = w_t - x_{t-1}$ is MA(1)
+      - sample ACF plot can help with differencing
+      - if the sample ACF does not decay to zero fast as h increases
+    b. moving average order q (looking at differenced out series $\nabla^d x_t$)
+      - use table 3.1 as your guide:
+        - If ACF cuts off, can guess its MA process
+    c. autoregressive order p (looking at differenced out series $\nabla^d x_t$ )
+      - use table 3.1 as your guide
+        - if PACF cuts off, it is AR process.
+    - This should give you a few preliminary values of p, d and q and allow you to start estimating the parameters.
+4. Estimate parameters
+5. Diagnostics
+6. Model Choice
+
+*Example 3.39 Analysis of GNP Data*
+**This example is highly relevant for my data as it is likely to exhibit many of the same patterns as mine... except it is seasonally adjusted.
+
+- Quarterly GNP from 1947(1) to 2002(3)
+- Data from fed erserve Bank of St. Louis.
+- call the data $y_t$. 
+- call the growth rate $x_t = \nabla log(y_t)$
+- the growth rate appears to be stable.
+
+- Looking at ACF and PACF, seems ACF is cutting off at lag 2
+- PACF is tailing off
+- therefore an MA(2) process for $x_t$
+- That is, $log(y_t)$ follows an ARIMA(0,1,2)
+
+- alternative story is that the ACF is tailing off and PaCF is cutting off at lag 1. So, ARIMA(1,1,0) for $log(y_t)$
+  - when you look at the pictures, both really are plausible. The answer isn't clear cut at all
+  
+- MA(2): \[\hat{x}_t = .008 + .303 \hat{w}_{t-1} + .204 \hat{w}_{t-2} + \hat{w}_t\]
+
+**Note that the constant is nonzero and highly significant; this is worth noting as some computer packages do not fit a constant in a differenced model!!! (which would appear to be incorrect). The constant captures the "drift". Here, it is around 1 percent; that is, the average quarterly growth rate of gdp is around 1%**
+
+- AR(1): \[.008 (1 - .347) + .347 \hat{x}_{t-1} + \hat{w}_t \]
+
+
+
+Note that (ignoring the constant term) if your tried to expand the process $x_t = .35x_{t-1} + w_t$ into its infinite invertible form, you get $x_t \approx .35w_{t-1} + .12 w_{t-2} + w_t$ which is pretty close to the (constantless) version of the stimated (with later terms relatively closer to 0.)
+
+```{r}
+plot(gnp)
+acf2(gnp, 50)
+gnpgr = diff(log(gnp)) # growth rate
+plot(gnpgr)
+acf2(gnpgr, 24)
+sarima(gnpgr, 1, 0, 0) # AR(1)
+sarima(gnpgr, 0, 0, 2) # MA(2)
+ARMAtoMA(ar=.35, ma=0, 10) # prints psi-weights
+# authors mention a script called tsdiag that plots diagnostics for ARIMA objects, but say its buggy and don't recommend using it
+
+```
+
+The authors give a number of excellent diagnostic tools with the example. The diagnostic tools are very easy to check, too.
+
+They recommend looking at:
+1. Standardized innovations (a.k.a. normalized residuals). If fits well, errors should look iid N(0,1). *Note, it is __not enough__ the errors are uncorrelated* Could be uncorrelated but still highly dependent, as discussed with GARCH in chapter 5.
+2. Check Marginal normality by making a QQ plot.
+3. Test for Randomness.
+  a. Runs test
+  b. Look at sample autocorrelation of residuals
+    i. sample autocorrelatoin should be iid normal with variance 1/n. Plot autocorrelation vs h and bars of plus or minus $2\sqrt{n}$
+    ii. Can use the Ljung-Box-Pierce Q-Statistic. Looks at the sum of squared autocoviarates. Should be distributed chi-squared if model right. The diagnostic tools looks for the sum up to H = 3, 4, .., 20. If any of the H values have significant p-values (i.e. very small), its a concern. Actually, for this one it looks like $H=5$ is small, but not below the dotted blue line. So, fine.
+  
+*Example 3.40 Diagnostics for GNP Growth Rate Example*
+
+See above.
+
+*Example 3.41 Diagnostics of the Glacial Varve Series
+
+```{r}
+sarima(log(varve), 0, 1, 1, no.constant=TRUE) 
+ # ARIMA(0,1,1) has problems
+sarima(log(varve), 1, 1, 1, no.constant=TRUE)
+ # ARIMA(1,1,1) looks much better
+
+# note that if remove no.constant=TRUE, the constant is not significant. Thats why didn't include it. Even though they previously complained a lot about some analysts leaving them out when the constants are significant.
+
+```
+
+We can see the second model fit very well. The first model fails the Ljung-Box statistic tests, though! The autocorrelatoin function is significant at every single sum of lags $H$.
+
+
+*Example 3.42 Ridiculous Answer with extreme overfitting*
+
+I mean, they baked it to look really bad. Whenever you are including polynomials, its gonna have weird extrapolatoin properties. Fit \[x_t = \beta_0 + \beta_1t + \beta_2 t + \cdots + \beta_8 t^8 + w_t\]
+
+Fit 8 points of census data from 1910 to 1990. Plots populatino to plummet after 1990.
+
+Reminds us of AIC and BIC for parsimonious model selection, to not overfit.
+
+
+*Example 3.43 Model Choice for the U.S. GNP Series*
+
+Compare AIC, AICc and BIC of AR(1) and MA(2) fit on US GNP data. More negative is better
+
+```{r}
+#Remembermore negative is better. THe numbers are really close though.
+sarima(gnpgr, 1, 0, 0) # AR(1)
+#$AIC: -8.294403 $AICc: -8.284898 $BIC: -9.263748
+sarima(gnpgr, 0, 0,2) # MA(2)
+# $AIC: -8.297693 $AICc: -8.287854 $BIC: -9.251711
+
+```
+
+Since both models work, retain the AR(1)! Pure AR are easier to work with than MA processes!.
+
+### 3.8 Regression with Autocorrelated Errors
+
+
+The basic idea of this section is how to deal with errors that don't look like white noise. The key insight is that we can solve it through a process that is analogous to weighted least squares. Essentially, if \[y_t = \sum_{j=1}^r \beta_j z_{jt} + x_t\] where $x_t$ is ARMA(p,q)
+
+*Note* this is kind of how you might approach this if you were a scientist and were just running a regression. As a diagnostic, you check how the Errors look. You discover the PACF and ACF suggest a time series process to errors. So, you fit the error time series and then adjust your regression estimates. 
+
+*Bigger Note:* Both the examples have AR(2) residuals. That is, all of the examples could have originally been fit as some kind of MA(2) process! Because if the residuals are AR(2) you could replace your regression model with one of MA(2), right? So, rather than running the weighted least squares regression, just run an MA(2) regression? It seems that is valid. **Indeed, this is exactly what the authors end up 
+
+
+Note, this is *not* a model of ARMA $y_t$ and ARMA $x_t$ but rather a relationship of linear $y_t$ dependence on $z_t$ but an ARMA noise process!. Could you also adapt to an ARMA $y_t$ model process? I would think you should be able to. Indeed, it might be reasonable that, if you can't tell if its an AR or an MA process, you start with the AR and look at the residuals and see if there is still some MA to them. 
+
+*Example 3.44 Mortality Temperature and Pollution*
+
+Model is \[M_t = \beta_1 + \beta_2 t + \beta_3 T_t + \beta_4 T_t^2 + \beta_5 P_t + x_t \] where $P_t$ is pressure, $T_t$ is temperature and $M_t$ is cardiovascular mortality. Exactly as discussesd in this section, the model is a *linear* model but the residuals are not iid Gausian. Rather, the errors are some time series. Sample ACF and PACF are shown in Figure 3.19. The results suggest an AR(2) model for the residuals.
+
+Fit \[x_t = \phi x_{t-1} + \phi_2 x_{t-2} + w_t \] with `sarima` function. The diagnostic tests on residuals look fine. Then we can run the weighted regression as discussed (although they don't give the code to run the final weighted regression!). 
+
+The weighted regression would require transforming $y_t$ into $y_t^\star = y_t - \phi_1 y_{t-1} - \phi_2 y_{t-2}$ and do that to all the other terms too (including the time constant? I guess so. Yes! if wanted the same $\beta$ for the constant, would need it!) So the constant would become $1 - \phi_1 - \phi_2$ and etc. After transformed all the variables to their new forms, then run the OLS again and you can interpret the regression coefficients *as if* you had run the same original regression! pretty cool.
+
+The author takes a nice shortcut from running the weighted regression, however, and simply runs an MA(2) model on the data! Nice. Exactly as I had reasoned would work at the start of this chapter. The sarima code both runs the new MA(2) regressoin and produces new diagnostics.
+
+
+
+```{r}
+trend = time(cmort); temp = tempr - mean(tempr); temp2 = temp^2
+summary(fit <- lm(cmort~trend + temp + temp2 + part, na.action=NULL))
+acf2(resid(fit), 52) #plots acf and pacf fo residuals
+# implies AR2 ish
+sarima(cmort, 2,0,0, xreg=cbind(trend,temp,temp2,part))
+
+```
+
+
+*Example 3.45 Regression with Lagged Variables*
+
+Fit the model \[R_t = \beta_0 + \beta_1 S_{t-6} + \beta_2 D_{t-6} + \beta_3 D_{t-6}S_{t-6} + w_t \]
+
+where $R_t$ is recruitment, $S_t$ is SOI and $D_t$ is a dummy variable that is 0 if $S_t < 0$ and 1 otherwise. (Essentially, the dummy is allowing for a level effect from SOI and the SOI term is allowing for a separate slope affect from SOI.) However, residual diagnostics suggest the residuals are *not* white noise. The sample (P)ACF of the residuals indicates an AR(2) model might be appropriate. 
+
+Note again that $R_t$ is *not* an ARMA process. The $w_t$ are an ARMA process. We will fit an AR(2) to the noise. (Although, isn't it the case that if the $w_t$ are AR(2), then $R_t$ is actually an MA(2
+) )
+
+
+```{r}
+dummy = ifelse(soi<0, 0, 1)
+fish = ts.intersect(rec, soiL6=lag(soi,-6), dL6=lag(dummy,-6), dframe=TRUE)
+summary(fit <- lm(rec ~soiL6*dL6, data=fish, na.action=NULL))
+attach(fish)
+plot(resid(fit))
+acf2(resid(fit))
+# indicates AR(2)
+intract = soiL6*dL6
+# interaction term
+sarima(rec,2,0,0, xreg = cbind(soiL6, dL6, intract))
+```
+
+
+
+### 3.9 Multiplicative Seasonal ARIMA (SARIMA) Models
+
+Section very relevant for me!
+
+This is the reason we have been using the (most general) sarima function for our regression! That's nice; just need to specify what we want and we can recover it!
+
+*Example 3.46 A Seasonal AR Series*
+
+A first-order seasonal AR series run over months could be written as \[(1 - \Phi B^{12})x_t = w_t\] or \[x_t = \Phi x_{t-12} + w_t\] They simulate 3 years of data from the model with $\Phi = .9$ and exhibit the *theoretical* ACF and PACF of the model.
+
+You can see that the PACF correctly picks up the AR(12) part of the process. The MA are exponentially decreasing modulo 12. 
+
+Indeed, the PACF and ACF behaviors for seasonal models are the same as classic ones, just everything is relative to the lags.
+
+```{r}
+set.seed(666)
+phi = c(rep(0,11),.9)
+sAR = arima.sim(list(order=c(12,0,0), ar=phi), n=37)
+sAR = ts(sAR, freq=12)
+layout(matrix(c(1,1,2, 1,1,3), nc=2))
+
+par(mar=c(3,3,2,1), mgp=c(1.6,.6,0))
+plot(sAR, axes=FALSE, main='seasonal AR(1)', xlab="year", type='c')
+Months = c("J","F","M","A","M","J","J","A","S","O","N","D")
+points(sAR, pch=Months, cex=1.25, font=4, col=1:4) #cool way to plot it
+axis(1, 1:4); abline(v=1:4, lty=2, col=gray(.7))
+axis(2); box()
+ACF = ARMAacf(ar=phi, ma=0, 100)
+PACF = ARMAacf(ar=phi, ma=0, 100, pacf=TRUE)
+plot(ACF,type="h", xlab="LAG", ylim=c(-.1,1)); abline(h=0)
+plot(PACF, type="h", xlab="LAG", ylim=c(-.1,1)); abline(h=0)
+```
+
+*Example 3.47 A Mixed Seasonal Model*
+
+An ARMA(0,1) $\times (1,0)_{12}$ model
+$x_t = \Phi x_{t-12} + w_t + \theta w_{t-1}$
+Simulated below with $\Phi = .8$ and $\theta = -.5$ These type of correlation relationships are typically seen with seasonal data.
+
+
+```{r}
+phi = c(rep(0,11),.8)
+ACF = ARMAacf(ar=phi, ma=-.5, 50)[-1]
+# [-1] removes 0 lag
+PACF = ARMAacf(ar=phi, ma=-.5, 50, pacf=TRUE)
+par(mfrow=c(1,2))
+plot(ACF, type="h", xlab="LAG", ylim=c(-.4,.8)); abline(h=0)
+plot(PACF, type="h", xlab="LAG", ylim=c(-.4,.8)); abline(h=0)
+
+```
+
+*Example 3.49 Air Passengers*
+
+Taken from Box and Jenkins (1970), its monthly totals of international airline passengers, 1949-1960.
+
+So, yeah, ddlx below looks stationary. (can be stationary but still seasonal). Note, that they did difference model on lx. Never did ddlx
+
+```{r}
+x = AirPassengers
+lx = log(x); dlx = diff(lx); ddlx = diff(dlx, 12)
+plot.ts(cbind(x,lx,dlx,ddlx), main="")
+# below of interest for showing seasonal RW (not shown here):
+par(mfrow=c(2,1))
+monthplot(dlx); monthplot(ddlx)
+sarima(lx, 1,1,1, 0,1,1,12) # first try
+ #AR Parameter is not significant 
+ # So try dropping it
+sarima(lx, 0,1,1, 0,1,1,12) # second try i, drop AR 
+sarima(lx, 1,1,0, 0,1,1,12) # another second ii, dropping the MA
+# The information criteria are more negative for version i. So kep that.
+
+sarima.for(lx, 12, 0,1,1, 0,1,1,12) # sarima.for does a forecast. The 12 means for 12 months. Looks pretty good!
+
+
+```
+
+That's the end of Chapter 3! Let's take some SARIMA models to the data!
+
+# Chapter 4 Spectral Analysis and Filtering
+
+*folding frequency* the highest frequency that can be seen in discrete sampling. Higher frequencies sampled this way will appear at lower frequencies called *aliases*.
+
+## 4.1 Cyclical Behavior and Periodicity
+
+*Example 4.1 A Periodic Series*
+
+This is an example of a mixture of frequencies:
+
+\[x_t = \sum_{k=1}^q \left [ U_{k1}\cos(2\pi \omega_k t) + U_{k2} \sin(2 \pi \omega_kt) \right ]\]
+
+
+q = 3. $\omega_1 = 6/100$, $\omega_2 = 10/100$, $\omega_3 = 40/100$. note that the individual contributions aren't too obvious in the final variable x = x1 + x2 + x3.
+
+```{r chapter4point1}
+x1 = 2*cos(2*pi*1:100*6/100) + 3*sin(2*pi*1:100*6/100)
+x2 = 4*cos(2*pi*1:100*10/100) + 5*sin(2*pi*1:100*10/100)
+x3 = 6*cos(2*pi*1:100*40/100) + 7*sin(2*pi*1:100*40/100)
+x = x1 + x2 + x3
+par(mfrow=c(2,2))
+plot.ts(x1, ylim=c(-10,10), main=expression(omega==6/100~~~A^2==13))
+plot.ts(x2, ylim=c(-10,10), main=expression(omega==10/100~~~A^2==41))
+plot.ts(x3, ylim=c(-10,10), main=expression(omega==40/100~~~A^2==85))
+plot.ts(x, ylim=c(-16,16), main="sum")
+
+```
+
+
+*Example 4.2 Estimation and Periodogram*
+
+Oh wow. In this example, we take a fft and do identify the frequencies from Example 4.1, 6/100, 10/100 and 40/100. Note that the scaled periodogram function $P(j/n)$ is such that \[P(j/n) = P(1 - j/n),\text{ } j = 0, 1, \dots, n-1\] So the frequencies are mirrored aroudn the "folding frequency" of 1/2. So, normally only plot the scaled periodogram function out to .5
+
+Be careful in that different packages scale the FFT differently. Consult the package documentation.
+
+The analogy between light and the periodogram as a prism decomposing waves into primary colors. Hence the term spectral analysis (like analyzing light waves.)
+
+```{r}
+P = Mod(2*fft(x)/100)^2; Fr = 0:99/100
+plot(Fr, P, type="o", xlab="frequency", ylab="scaled periodogram")
+
+```
+
+
+*Example 4.3 Star Magnitude*
+
+600 consecutive dats of star (light) magnitude. Data taken from "The Calculus of Observations, a Treatise on Numerical Mathematics" by E.T. Whittaker and G Robinson 1923.
+
+For the cycles, note that 29 days is about 1/.035 and a 24 day cycle is about 1/.041. They are the most prominent periodic components of the data.
+
+Interpret the result as the observation of an amplitude modulated signal. For example, suppose we are observing signal-plus-noise $x_t = s_t + v_t$. Here, $s_t = \cos(2\pi \omega t) \cos(2 \pi \delta t)$ and $\delta$ is very small. In this case the process will oscillate at frequency $\omega$ but the amplitude will be modulated by $\cos(2 \pi \delta t)$. Since \[2\cos(\alpha) \cos(\delta) = \cos(\alpha + \delta) + \cos(\alpha - \delta)\], the periodogram of data generated as $x_t$ will have two peaks close to each other at $\alpha \pm \delta$
+```{r}
+# testing the ideas above. See peaks at .2-.01 and .2+ .01. i.e. alpha = .2 and delta = .02
+# since the fft is symmetric about .5, also see them around .8...
+t = 1:200
+plot.ts(x <- 2*cos(2*pi*.2*t)*cos(2*pi*.01*t)) # not shown
+lines(cos(2*pi*.19*t)+cos(2*pi*.21*t), col=2) # the same
+Px = Mod(fft(x))^2; plot(0:199/200, Px, type='o') # the periodogram
+
+
+# reproducing with star data
+n = length(star)
+par(mfrow=c(2,1), mar=c(3,3,1,1), mgp=c(1.6,.6,0))
+plot(star, ylab="star magnitude", xlab="day")
+Per = Mod(fft(star-mean(star)))^2/n
+Freq = (1:n -1)/n
+plot(Freq[1:50], Per[1:50], type='h', lwd=3, ylab="Periodogram",
+xlab="Frequency")
+u = which.max(Per[1:50]) # 22 freq=21/600=.035 cycles/day
+uu = which.max(Per[1:50][-u])# 25 freq=25/600=.041 cycles/day
+1/Freq[22]; 1/Freq[26] # period = days/cycle
+text(.05, 7000, "24 day cycle"); text(.027, 9000, "29 day cycle") 
+  ### another way to find the two peaks is to order on Per
+y = cbind(1:50, Freq[1:50], Per[1:50]); y[order(y[,3]),]
+
+```
+
+
+## 4.2 The Spectral Density
+
+The Spectral density is the fundamental frequency domain tool. It is covered in this chapter along with the spectral representations for stationary processes. Like the Wold decomposition justified the use of regression for analyzing time series, the spectral representation theorems supply the theoretical justifications for decomposing stationary time series into periodic components appearing in proportion to their underlying variances. See Appendix C for more.
+
+
+
+## 4.3 Periodogram and Discrete Fourier Transform
+
+Complex numbers in R. Showing how to calculate DFT (Discrete Fourier Transform) and its inverse (labeled idft in code below). Note the same operation does and then undoes them. i.e. fft(fft(x)) = x. Weird).
+ 
+```{r}
+(dft = fft(1:4)/sqrt(4))
+#[1] 5+0i -1+1i -1+0i -1-1i
+(idft = fft(dft, inverse=TRUE)/sqrt(4))
+#[1] 1+0i 2+0i 3+0i 4+0i
+(Re(idft)) # keep it real
+#[1] 1 2 3 4
+```
+
+*Example 4.10*
+
+```{r}
+x = c(1, 2, 3, 2, 1)
+c1 = cos(2*pi*1:5*1/5);
+s1 = sin(2*pi*1:5*1/5)
+c2 = cos(2*pi*1:5*2/5);
+s2 = sin(2*pi*1:5*2/5)
+omega1 = cbind(c1, s1); omega2 = cbind(c2, s2)
+anova(lm(x~omega1+omega2))
+# ANOVA Table
+Mod(fft(x))^2/5
+# the periodogram (as a check). Oh, raise it to the 2nd power then
+# divide by 5 = n. right.
+# the periodogram mod(fft(x))^2/5 seems to agree with the table presented in the book. In order they are.
+# I(0) I(1/5) I(2/5)  I(3/5)  I(4/5)
+
+
+```
+
+*Note, should remove trends before computing the periodogram.* Trends introduce extremely low frequency components in the periodogram that tend to obscure the appearance at higher frequencies. So, either apply it to $x_t - \bar{x}$ or $x_t - \hat{\beta}_1 - \hat{\beta}_2 t$ (or higher order polynomial if nonlinearity in trend) to eliminate the terms that will be considered *half cycles* by the spectral analysis. (Oh sure, they will think it went up and is due to come down over the next n data observations.)
+
+Note the FFT is easiest to calculate when $n = 2^p$ for some p. (i.e. when n is a factor of 2). To accomodate this, if $x_t^c$ is the detrended (i.e. centered) data, then just add zeros (e.g. $x_{n+1}^c = x_{n+2}^c = \cdots = x_{n'}^c = 0$) for $n' = 2^p$. However, *doing this will change the fundamental frequencies* from $j/n$ to $j/n'$. So, need to bear this in mind. Just rescale them by $n/n'$ when you find them. The command `nextn` can help with finding the most appropriate n. 
+
+
+*Example 4.13 Periodogram of SOI and Recruitment Series
+
+Note that the closer to the left the frequencies are, the longer the cycles they correspond to. So, the shortest frequency is $\omega_j = 1/2$ and corresponds to data that cycles every *two* points. This would be the rightmost frequency in a standard periodogram (from 0 to 1/2 on the x-axis). That is *as we move from left to right in the periodogram, we are looking at indications for longer to shorter cycles.)
+
+For the SOI, we see a strong spike at 1 (because increments are 1 step is $w_j = 1/12$). Very annoying labeling system. the 1/4 is actually 1/4$\times$1/12 = 1/48 (corresponding to every 4 years). The periodogram goes to 6$\times$1/12 = .5 as is standard. The little dancing around the $1/4$ line is because there is some "unstable" cycle every 4 years or so. It looks like there may be some unstable cycles at the 2/12 (every 6 months) and 3/12 (every 4 months) frequencies, but less noticeable. The recruitment series ("rec") shows the same underlying aptterns, but more dramatically in the case of the 4 year cycle.
+
+Notice that the `mvspec` command is used in calculating and graphing the periodogram. (It's great; the hardest part is understanding the math. R code is set up to generate all the analysis for you easily! Except for the confidence intervals. Its annoying those had to be calculated by hand.)
+```{r}
+?nextn # to find the n that makes fft easiest to calculate.
+# i believe the program does this automatically and then maybe
+# recorrects it for you too?
+nextn(453)
+nextn(950) #interesting
+
+
+par(mfrow=c(2,1))
+soi.per = mvspec(soi, log="no")
+abline(v=1/4, lty=2)
+rec.per = mvspec(rec, log="no")
+abline(v=1/4, lty=2)
+
+
+# to calculate the confidnce intervals
+# note that its 40/480. because 480 is the n that is used
+# to make calculating easier! Even though the data had 453 originally
+soi.per$spec[40] # 0.97223; soi pgram at freq 1/12 = 40/480
+soi.per$spec[10] # 0.05372; soi pgram at freq 1/48 = 10/480
+# conf intervals - returned value:
+U = qchisq(.025,2) # 0.05063, upper bound weight
+L = qchisq(.975,2) # 7.37775, lower bound weight
+# recall its 2 * I(\omega_{j:n})/\chi_2^2(blah) where blah
+# is \alpha/2 or 1 - \alpha/2
+2*soi.per$spec[10]/L # 0.01456
+2*soi.per$spec[10]/U # 2.12220
+2*soi.per$spec[40]/L # 0.26355
+2*soi.per$spec[40]/U # 38.40108
+```
+
+We see from here that the periodogram is a noisy estimator and we will need to find a way to reduce the variance to make it useful. This is actually obvious from the math: for any n, the periodogram is based on only two observations! (This is why 2 degrees of freedom.)
+
+Moreover, $I(\omega) \sim \frac{1}{2} f(\omega) \chi_2^2$ so $E(I(\omega)) = f(\omega)$ and $Var(I(\omega)) = f^2(\omega)$. Therefore the variance of $I(\omega)$ is not shrinking in n. So, the periodogram is not a consistent (in the mean-squared sense) estimator of the spectral density. The solution to improving the estimate is using smoothing (nonparametric estimation). 
+
+## 4.4 Nonparametric Spectral Estimation
+
+\[\bar{f}(\omega) = \frac{1}{L} \sum_{k=-m}^m I(\omega_j + k/n)\] over the band $\mathcal{B} = \left \{ \omega^\star: \omega_j - m/n \le \omega^\star \le \omega_j + m/n   \right \}$
+
+```{r}
+library(astsa)
+arma.spec(ar=c(1,-.9), xlim=c(.15,.151), n.freq=100000)
+```
+
+*Example 4.14 Averaged Periodogram for SOI and Recruitment*
+
+Should try a couple bandwidths at least. (i.e. try different values of L). 
+
+See an undesirable effect of averaging: the narrow band peaks that appeared in the periodograms in Figure 4.5 have been flatteened and spread out to nearby frequencies. Some Harmonics of the yearly cycle show up also (espeically in the soi plot); Harmonics typically occur when a periodic non-sinusoidal component is present.
+
+
+
+```{r}
+library(pacman)
+p_load(astsa)
+soi.ave = mvspec(soi, kernel('daniell',4), log='no')
+# note, when you specify the kernel, you give it the name (daniell)
+# and m (here, m = 4.) Then L = 2m + 1 is the numerator of the bandwidth. So, you give it half the numerator of teh bandwidth, approximately. R notes call m the "kernel dimension". The displayed bandwidth is in terms of cycles per year rather than cycles per month. i.e. L/n = 9/480 for cycles per monoth, 12*L/n = .225 is cycles per year (How does R know its annual data? or is that the default in code)
+abline(v=c(.25,1,2,3), lty=2)
+soi.ave$bandwidth
+ # = 0.225
+# Repeat above lines using rec in place of soi on line 3
+
+rec.ave = mvspec(rec, kernel('daniell',4), log='no')
+# note, when you specify the kernel, you give it the name (daniell)
+# and m (here, m = 4.) Then L = 2m + 1 is the bandwidth. So, you 
+# give it half the bandwidth approximately. 
+abline(v=c(.25,1,2,3), lty=2)
+rec.ave$bandwidth
+
+# Note, you don't have to choose the bandwidth
+# R will compute one for you if you don't provide one!
+# Probably better to start with theirs first. Its annoying that
+# you provide m and it calculates a bandwidth in terms
+# of L/n*12
+rec.ave2 = mvspec(rec, kernel('daniell'), log='no')
+abline(v=c(.25,1,2,3), lty=2)
+rec.ave2$bandwidth
+
+# adjusted df = 2*L*n/n'
+df = soi.ave$df
+ # df = 16.9875 (returned values)
+U = qchisq(.025, df)
+ # U = 7.555916
+L = qchisq(.975, df)
+ # L = 30.17425
+soi.ave$spec[10]
+ # 0.0495202
+soi.ave$spec[40]
+ # 0.1190800
+# intervals
+df*soi.ave$spec[10]/L
+ # 0.0278789
+df*soi.ave$spec[10]/U
+ # 0.1113333
+df*soi.ave$spec[40]/L
+ # 0.0670396
+df*soi.ave$spec[40]/U
+ # 0.2677201
+
+# note , log is not the default. have to add log='y' to it
+# default is log='n' now
+soi.avelog = mvspec(soi, kernel('daniell',4), log='y')
+abline(v=c(.25,1,2,3), lty=2)
+soi.avelog$bandwidth #same just y axis is log transformed
+
+rec.avelog = mvspec(rec, kernel('daniell',4), log='y')
+abline(v=c(.25,1,2,3), lty=2)
+rec.avelog$bandwidth #same, just y axis is log transformed
+
+# log transformed is totally different looking and I think misleading even?
+```
+
+*Example 4.15 Harmonics*
+
+Minor peaks at the annual harmonics displayed in previous example. That is, signal psectra had peak at $\omega=1\Delta = 1/12$ and minor peaks at $\omega = k \Delta$ for $k = 2,3,\dots$. The harmonics are needed to capture the non-sinusoidal behavior of the signal.
+
+Generate a signal $x_t$ as follows:
+\[x_t = \sin(2\pi2t) + .5 \sin(2 \pi 4t) + .4 sin(2\pi 6t) + .3 \sin(2 \pi 8 t) + .2 \sin (2 \pi 10 t) + .1 \sin (2 \pi 12 t)\] You can see its got frequencies from 2 to 12 and the amplitude keeps shrinking as the frequencies frow (periods shrink.) The fundamental frequency is the shortest frequency (2) or longest period/wavelength (1/2). The higher harmonics have shorter wavelength (longer frequency).
+
+```{r}
+t = seq(0, 1, by=1/200)
+amps = c(1, .5, .4, .3, .2, .1)
+x = matrix(0, 201, 6)
+for (j in 1:6){ x[,j] = amps[j]*sin(2*pi*t*2*j) }
+x = ts(cbind(x, rowSums(x)), start=0, deltat=1/200)
+ts.plot(x, lty=c(1:6, 1), lwd=c(rep(1,6), 2), ylab="Sinusoids")
+names = c("Fundamental","2nd Harmonic","3rd Harmonic","4th Harmonic", 
+   "5th Harmonic", "6th Harmonic", "Formed Signal")
+legend("topright", names, lty=c(1:6, 1), lwd=c(rep(1,6), 2))
+
+
+kernel("modified.daniell", c(1,1))
+```
+
+What we learn is that we need systematic procedures for deciding whether peaks are significant. 
+
+*Example 4.16 Smoothed Periodogram for SOI and Recruitment*
+
+A key difference we see between nonparametrics on the periodogram and nonparametrics in continuous regression is that the weights and points to be incorporated are distributed over discrete points rather than continuous points. This means the distribution of weights will be discrete distribution and can be described fairly simply. Also, which points to incorporate will be too. But, we will see more jumps in our choice of bandwidth for discrete distributions, probably. So, be sure to play around with it for discrete.
+
+The claim is that for this is the *modified daniell* kernel did a better job than the previous daniell kernel. Note also that there was a taper added to this picture. 
+
+```{r}
+kernel("modified.daniell", c(3,3))
+#coef[-6] = 0.006944 = coef[ 6]
+#coef[-5] = 0.027778 = coef[ 5]
+#coef[-4] = 0.055556 = coef[ 4]
+#coef[-3] = 0.083333 = coef[ 3]
+#coef[-2] = 0.111111 = coef[ 2]
+#coef[-1] = 0.138889 = coef[ 1]
+#coef[ 0] = 0.152778
+plot(kernel("modified.daniell", c(3,3)))
+ # not shown
+
+
+k = kernel("modified.daniell", c(3,3))
+soi.smo = mvspec(soi, kernel=k, taper=.1, log="no")
+abline(v=c(.25,1), lty=2)
+## Repeat above lines with rec replacing soi in line 3
+df = soi.smo$df
+ # df = 17.42618
+soi.smo$bandwidth
+ # B = 0.2308103
+soi.smo = mvspec(soi, taper=.1, spans=c(7,7))
+# spans is a vector of odd integers given in terms of L = 2m+ 1
+
+soi.smo = mvspec(soi, kernel=k, taper=.1, log="yes")
+  # the log one is hard to interpret. seems like a bad idea in general.
+```
+
+**Note, that it may be appropriate to allow the bandwidth to vary across the estimating spectrum. This is seen here in that the the smoothing bandwidth for the broadband El Nino behavior near the 4 year cycle should be much larger than the bandwidth for the annual cycle (which is frather to the write on the periodogram). See Fan and Kreutzberger (1998) for more on what is called "automatic adaptive smoothing for estimating the spectrum."**
+
+
+*Example 4.17 The Effect of Tapering the SOI Series*
+
+The tapered example does a better job in separating the yearly cycle and the El Nino cycle. The lack of a dip between the dips between the yearly and El Nino cycle in the untapered example is called "leakage". Essentially, one cycle's estimated frequency is "leaking" into the other cycle's estimated frequency in the case without tapering. See it between 0 and 1 on the plot below with dashed line above solid line. (It seems to me that the leakage isn't that bad and you can still distinguish the two peaks, though.)
+
+
+```{r}
+s0 = mvspec(soi, spans=c(7,7), plot=FALSE)
+ # no taper
+s50 = mvspec(soi, spans=c(7,7), taper=.5, plot=FALSE)
+ # full taper
+plot(s50$freq, s50$spec, log="y", type="l", ylab="spectrum",
+xlab="frequency")
+ # solid line
+lines(s0$freq, s0$spec, lty=2)
+ # dashed line
+```
+
+## 4.5 Parametric Spectral Estimation
+
+
+So, it turns out any stationary process can be approximated arbitrarily well by a (perhaps very high order) AR(p) process. The asymptotic distribution of the AR(p) estimate is sketchy; the authors encourage us to use the bootstrap for CI instead.
+
+So, rather than use `mvspec` for nonparametric kernel estimates, can use `spec.ar`.
+
+*Example 4.18 Autoregressive Spectral Estimator for SOI*
+
+```{r}
+spaic = spec.ar(soi, log="no") #to generate ar spectral estimate
+ # min AIC spec
+abline(v=frequency(soi)*1/52, lty=3)
+ # El Nino peak
+```
+
+```{r}
+# These are showing AIC for different order length fits
+# No likelihood is calculated here os the use of the term AIC is "loose."
+(soi.ar = ar(soi, order.max=30))
+ # estimates and AICs
+dev.new()
+plot(1:30, soi.ar$aic[-1], type="o")
+ # plot AICs; looks like 15 is right number of lag terms from AIC perspective.
+```
+
+```{r}
+# AIC and AICc are nearly identical so just graphed AIC and BIC+1
+n = length(soi)
+AIC = rep(0, 30) -> AICc -> BIC
+for (k in 1:30){
+sigma2 = ar(soi, order=k, aic=FALSE)$var.pred
+BIC[k] = log(sigma2) + (k*log(n)/n)
+AICc[k] = log(sigma2) + ((n+k)/(n-k-2))
+AIC[k] = log(sigma2) + ((n+2*k)/n)
+ }
+IC = cbind(AIC, BIC+1)
+ts.plot(IC, type="o", xlab="p", ylab="AIC / BIC") #15 for BIC too
+
+```
+
+## 4.6 Multiple Series and Cross-Spectra
+
+*Example 4.21 Coherence Between SOI and Recruitment*
+
+In this picture, the blue lines are confidence bands and the black line is alpha = .001 significance level. Bear in mind that the Bonferroni inequality means we have to have some caution in interpreting all the points above this line as significant.
+
+It looks like, from the picture, that the two series are "coherent" during the 1 year frequency. They also look strongly coherent at lower frequencies, which may be El Nino which have a 3-7 year period. The peak in coherency occurs at the 9 year cycle. As you go farther to the right along the plot, the underlying power spectrum is small and therefore we should be more skeptical of these close to the end. Finally, note that the coherence is persistent at the seasonal harmonic frequencies. 
+
+
+```{r, eval=FALSE}
+sr = mvspec(cbind(soi,rec),
+ kernel("daniell",9), plot=FALSE)
+sr$df # df = 35.8625
+f = qf(.999, 2, sr$df-2) # = 8.529792
+C = f/(18+f) # = 0.321517
+plot(sr, plot.type = "coh", ci.lty = 2)
+abline(h = C)
+
+```
+
+## 4.7 Linear Filters
+
+*Example 4.22 First Difference and Moving Average Filters*
+
+Looking at two filters. 1) is a first difference filter and (2) is an annual symmetric MA filter (which is essentially the modified daniell kernel with m = 6 if monthly data.) 
+
+1. $y_t = \nabla x_t$
+2. $y_t = (x_{t-6} + x_{t+6})/24 + \sum_{r=-5}^5 x_{t-r}/12$
+
+The first one is called a *high-pass* filter, since it keeps the higher frequency patterns. The second is called a low-pass filter since it keeps the lower frequencies. (I don't know, how do you know you're not creating new frequency patterns when you use these filters? especailly the 2nd one?) The claim is that the 
+
+```{r}
+par(mfrow=c(3,1), mar=c(3,3,1,1), mgp=c(1.6,.6,0))
+plot(soi)
+ # plot data
+plot(diff(soi))
+ # plot first difference
+k = kernel("modified.daniell", 6) # filter weights
+plot(soif <- kernapply(soi, k))
+ # plot 12 month filter
+dev.new()
+spectrum(soif, spans=9, log="no") # spectral analysis (not shown)
+abline(v=12/52, lty="dashed")
+dev.new()
+##-- frequency responses --##
+par(mfrow=c(2,1), mar=c(3,3,1,1), mgp=c(1.6,.6,0))
+w = seq(0, .5, by=.01)
+FRdiff = abs(1-exp(2i*pi*w))^2
+plot(w, FRdiff, type="l", xlab='frequency')
+u = cos(2*pi*w)+cos(4*pi*w)+cos(6*pi*w)+cos(8*pi*w)+cos(10*pi*w)
+FRma = ((1 + cos(12*pi*w) + 2*u)/12)^2
+plot(w, FRma, type='l', xlab='frequency')
+
+```
+
+## 4.8 Lagged Regression Models
+
+*Example 4.24 Lagged Regression for SOI and Recruitment*
+
+Let $x_t$ denote the SOI series and $y_t$ denote the Recruitment series. We will write the SOI as the input with the following model:
+
+\[y_t = \sum_{r=-\infty}^\infty a_r x_{t-r} + w_t\]
+
+A model that reverses the two roles will be denoted as 
+\[x_t = \sum_{r=-\infty}^\infty b_r y_{t-r} + \nu_t\]
+
+Here, $w_t$ and $\nu_t$ are white noise processes. Use the R script `LagReg` from `astsa`. Use M=32 and L=15 (based on ???).
+
+
+
+```{r, eval=FALSE}
+# Forward REgression
+LagReg(soi, rec, L=15, M=32, threshold=6)
+```
+Note that the one line of code does a lot!
+
+The regression output suggests a possible model
+\[y_t = 66 - 18.5x_{t-5} - 12.3x_{t-6} - 8.5 x_{t-7} - 7 x_{t-8} + w_t\] Of course, this model ignores some coefficients that are not that small
+
+```{r, eval = FALSE}
+# Reverse Regression
+LagReg(rec, soi, L=15, M=32, inverse=TRUE, threshold=.01)
+```
+
+Note that this regression actually produces a much easier-to-interpret model! Or more parsimonious. Just two obviously significant lag terms. So we can write
+\[x_t = .41 + .016 y_{t+5} - .02y_{t+5} + v_t\]. We can now solve this equation for $y_t$ Namely, multiplying each side by $50B^5$ gets us \[(1 - .8B)y_t = 20.5 - 50B^5 x_t + \epsilon_t\]**So a good strategy can be to try both regressions and invert the simpler one!
+
+Finally, do some checks to verify the final $\epsilon_t$ noise is white. We will rerun the regression with autocorrelated errors and reestimate the coefficients. This is referred to as an ARMAX model (the X stands for exogenous; see Section 5.6 and Section 6.6.1):
+
+```{r}
+fish = ts.intersect(R=rec, RL1=lag(rec,-1), SL5=lag(soi,-5))
+(u = lm(fish[,1]~fish[,2:3], na.action=NULL))
+acf2(resid(u)) # suggests ar1
+sarima(fish[,1], 1, 0, 0, xreg=fish[,2:3])
+ # armax model; the x stands for exogenous
+```
+
+Our final parsimonious fitted model is
+
+\[y_t = 12 + .8y_{t-1} -  21 x_{t-5} + \epsilon_t\] where $\epsilon_t = .45 \epsilon_{t-1} + w_t$
+
+**Note that the authors keep referring to the $\beta_r$ as relating the $x_t$ to the $y_t$ series (or vice versa) as the "transfer functions". That is, the transfer functions translate changes in one series to another series. This is why macroeconomists call functions like this transfer functions. This is not to be confused with transport functions.** 
+
+## 4.9 Signal Extraction and Optimum Filtering
+
+Wait, if we are looking in the frequency space, does that mean we are assuming that there is a pattern to the signal? As in, it comes in and goes away regularly. Rather than just these weird events or random phenomenon? For my problem, I don't want to extract a steady hidden pulse, but rather times of persistently uncharacteristic behavior. What I really want is GARCH then.
+
+Alternatively, I think I could imagine it as a signal extraction process if I want to isolate the annual cycle. Then, the remainder as the "noise", see when it peaks. So, I guess there are kind of two ways you can think about the problem, depending what you think is "noise" and what you think is informational in your process.
+
+At the end of the day, all the solution techniques are about sorting your data into explainable and unexplainable parts. Its just, what part of the explainable parts are you interested in? Low-frequency, high-frequency? etc...
+
+*Example 4.25 Estimating the El Nino Signal via Optimal Filters*
+
+Assume the simple signal plus noise model:
+
+$y_t = x_t + \nu_t$ so that there is no convolving function $\beta_t$. We notice the El Nino frequency of about .02 cycles per month ( the four-year cycle) and a yearly frequency of about .08 cycles per month (the annual cycle). We assume that we wish to *preserve the lower frequency as signal and to eliminate the higher order frequencies*. So, the signal-to-noise ratio is assumed to be high from 0 to about .06 cycles per month and zero thereafter.So, choose one that's 1 from 0 to .05 and then decays linearly to zero in several steps.
+
+In the pictures below, they would like that box-like filter. But, they have to taper it to avoid the ripples, so get the bump-filter.
+```{r}
+
+# graphics.off()
+SigExtract(soi, L=9, M=64, max.freq=.05)
+
+
+```
+
+Does any of this have anything to do with wavelets?
+
+## 4.10 Spectral Analysis of Multidimensional Series
+
+*Example 4.26 Soil Surface Temperatures*
+
+This gets into some pretty interesting stuff, actually. This is looking  a lot like the heat equation. Multidimensional waves running across a surface. Look for the set of $(\omega_j, \omega_k)$ that correspond to the wave frequency in both dimensions. It is weird to think about a wave that has different y-dimension frequency than x-dimension. Any purely one dimensional waves would be on the x- or y-axis I guess of two-dimensional periodogram.
+
+In this example, all the strong frequencies have column frequency zero. So, all the patterns are aross rows.
+
+```{r}
+per = Mod(fft(soiltemp-mean(soiltemp))/sqrt(64*36))^2
+per2 = cbind(per[1:32,18:2], per[1:32,1:18])
+per3 = rbind(per2[32:2,],per2)
+par(mar=c(1,2.5,0,0)+.1)
+persp(-31:31/64, -17:17/36, per3, phi=30, theta=30, expand=.6,
+      ticktype="detailed", xlab="cycles/row", ylab="cycles/column",
+      zlab = "Periodogram Ordinate")
+```
+
+
+# Chapter 5 Additional Time Domain Topics
+
+This chapter covers topics that are *special* or *advanced* in the time domain. The next chapter, Chapter 6, is devoted to one of the most useful and interesting time domain topics: state-space models. Therefore, they do not cover state space models in chapter 5. Most of the sections in this chapter can be read in any order.
+
+## 5.1 Long Memory ARMA and Fractional Differencing
+
+Long memory aka persistent time series.
+
+Often call ARMA(p,q) process as short-memory process because the coefficients are dominated by exponential decay. Before, the advice was that if the ACF of a time series decays slowly, difference the series until it seems stationary. 
+
+Sometimes, however, using the differenced model may be too severe a modification, in that it may be an overdifferencing of the original process. Apparently this goes back to Granger and Joyeux (1980). Basic idea, "partly difference it. i.e. for $d\in (0, .5)$,put 
+$(1 - B)^dx_t = w_t$ Estimate $d$ along with $\sigma_w^2$. Call the factionally differenced series "fractional noise".
+
+(What does that mean even if d = .5? Estimate something a half time-step between and remove it? What it actually means is to use the Gamma function to generate the coefficients. ie. for $( d > -1 )$ we can write \[w_t = (1 - B)^dx_t = \sum_{j=0}^\infty \pi_j B^jw_t = \sum_{j=0}^\infty \pi_j w_{t-j}\] where $\pi_j = \frac{\Gamma(j - d)}{\Gamma(j + 1)\Gamma(-d)}$ and for $d < 1$, we can invert that formula to get \[x_t = (1 - B)^{-d}_t = \sum_{j=0}^\infty \psi_j B^jw_t =  \sum_{j=0}^\infty \psi_j w_{t-j} \] where
+$\psi_j = \frac{\Gamma(j + d)}{\Gamma(j+1)\Gamma(d)}$ Brockwell and Davis explain it more carefully. 
+
+
+In the case of fractional differencing, just require $\sum \pi_j^2<\infty$ rather than $\sum |\pi_j|^2 < \infty$ (but since their squared, as long as the coefficients are real, isn't this equivalent?)
+
+Can show for $0<d<1$ \[\rho(h) = \frac{\Gamma(h + d)\Gamma(1-d)}{\Gamma(h - d + 1)\Gamma(d)} \sim h^{2d-1}\] for large h. Therefore, for $0<d<1/2$ $\sum_{h=-\infty}^\infty |\rho(h)| = \infty$ and hence "long memory" 
+
+
+*"ARFIMA = Fractionally Integrated ARMA"*
+
+
+
+
+```{r}
+# Sample ACF of the log-transformed varce series
+# It exhibits classic long memory behavior
+acf(log(varve), 100)
+acf(cumsum(rnorm(1000)), 100)
+ # compare to ACF of random walk (not shown)
+
+```
+
+*Example 5.1 Long Memory Fitting of the Glacial Varve Series*
+
+In example 3.41 analyzed this as a ARIMA(1,1,1) process. Now, fit the fractionally differenced model $(1-B)^dx_t = w_t$ to the mean-adjusted series $x_t - \bar{x}$. Start with a guess of $d=.1$, omit the first 30 points from the computation leads to a final value of $d = .384$. This tells us the *entire* coefficient chain $\pi_j(.384)$ for each $j$! (So, it looks like a model with many terms, but all you are fitting is $d$, no other coefficients. So it really only has 1 degree of freedom. I find it hard to believe this is a good strategy in general!)
+
+
+```{r}
+# Need the fracdiff package
+library(pacman)
+p_load(fracdiff)
+lvarve = log(varve)-mean(log(varve))
+varve.fd = fracdiff(lvarve, nar=0, nma=0, M=30)
+varve.fd$d
+ # = 0.3841688
+varve.fd$stderror.dpq
+ # = 4.589514e-06 (questionable result!!)
+p = rep(1,31)
+for (k in 1:30){ p[k+1] = (k-varve.fd$d)*p[k]/(k+1) }
+plot(1:30, p[-1], ylab=expression(pi(d)), xlab="Index", type="h")
+res.fd = diffseries(log(varve), varve.fd$d)
+ # frac diff resids
+res.arima = resid(arima(log(varve), order=c(1,1,1))) # arima resids
+par(mfrow=c(2,1))
+acf(res.arima, 100, xlim=c(4,97), ylim=c(-.2,.2), main="")
+acf(res.fd, 100, xlim=c(4,97), ylim=c(-.2,.2), main="")
+
+```
+
+*Example 5.2 Long Memory Spectra for the Varve Series*
+
+```{r}
+series = log(varve)
+ # specify series to be analyzed
+d0 = .1
+ # initial value of d
+n.per = nextn(length(series))
+m = (n.per)/2 - 1
+per = Mod(fft(series-mean(series))[-1])^2 # remove 0 freq and
+per = per/n.per
+ # scale the peridogram
+g = 4*(sin(pi*((1:m)/n.per))^2)
+# Function to calculate -log.likelihood
+whit.like = function(d){
+g.d=g^d
+sig2 = (sum(g.d*per[1:m])/m)
+log.like = m*log(sig2) - d*sum(log(g)) + m
+return(log.like)
+ }
+# Estimation (output not shown)
+(est = optim(d0, whit.like, gr=NULL, method="L-BFGS-B", hessian=TRUE,
+lower=-.5, upper=.5, control=list(trace=1,REPORT=1)))
+##-- Results: d.hat = .380, se(dhat) = .028, and sig2hat = .229 --##
+cat("d.hat =", est$par, "se(dhat) = ",1/sqrt(est$hessian),"\n")
+g.dhat = g^est$par; sig2 = sum(g.dhat*per[1:m])/m
+cat("sig2hat =",sig2,"\n")
+
+```
+
+```{r,eval=FALSE}
+u = spec.ar(log(varve), plot=FALSE) # produces AR(8)
+g = 4*(sin(pi*((1:500)/2000))^2)
+fhat = sig2*g^{-est$par} # long memory spectral estimate
+plot(1:500/2000, log(fhat), type="l", ylab="log(spectrum)", xlab="frequency")
+lines(u$freq[1:250], log(u$spec[1:250]), lty="dashed")
+ar.mle(log(varve)) # to get AR(8) estimates
+
+
+library(fracdiff)
+fdGPH(log(varve), bandw=.9) # m = n^bandw
+dhat = 0.383
+se(dhat) = 0.041
+
+```
+
+
+
+
+## 5.2 Unit Root Testing
+
+```{r}
+library(tseries)
+adf.test(log(varve), k=0)
+ # DF test
+#Dickey-Fuller = -12.8572, Lag order = 0, p-value < 0.01
+#alternative hypothesis: stationary
+adf.test(log(varve))
+ # ADF test
+#Dickey-Fuller = -3.5166, Lag order = 8, p-value = 0.04071
+#alternative hypothesis: stationary
+pp.test(log(varve))
+ # PP test
+#Dickey-Fuller Z(alpha) = -304.5376,
+#Truncation lag parameter = 6, p-value < 0.01
+#alternative hypothesis: stationary
+
+```
+
+
+## 5.3 GARCH Models
+
+The study of the *volatility* (or variability around trend) of a time series. For situations where the assumption of a constant conditional mean is violated.
+
+- ARCH = Autoregressive Conditionally Heteroscedastic 
+  - Extended to generalized ARCH = GARCH
+- concerned with modeling the return or growth rate of a series.
+
+\[r_t = (x_t - x_{t-1})/x_{t-1} \Rightarrow x_t = (1+r_t)x_{t-1}\]
+If the return $r_t$ represents a small (in magnitude) percentage change then 
+\[\nabla \log(x_t) \approx r_t\]
+
+Call either one the "return."
+
+*Example 5.4 Analysis of US GNP*
+
+```{r}
+u = sarima(diff(log(gnp)), 1, 0, 0)
+acf2(resid(u$fit)^2, 20)
+library(fGarch)
+summary(garchFit(~arma(1,0)+garch(1,0), diff(log(gnp))))
+# garch(1,0) specifies an ARCH(1) in the code below (details later).
+```
+
+*Example 5.5 Garch Analysis of the DJIA Returns*
+
+```{r, eval=FALSE}
+library(xts)
+djiar = diff(log(djia$Close))[-1]
+acf2(djiar)
+ # exhibits some autocorrelation (not shown)
+acf2(djiar^2)
+ # oozes autocorrelation (not shown)
+library(fGarch)
+summary(djia.g <- garchFit(~arma(1,0)+garch(1,1), data=djiar,
+cond.dist='std'))
+plot(djia.g)
+ # to see all plot options
+```
+
+*Example 5.6 APARCH Analysis of the DJIA Returns*
+
+```{r, eval=FALSE}
+library(xts)
+library(fGarch)
+summary(djia.ap <- garchFit(~arma(1,0)+aparch(1,1), data=djiar,
+cond.dist='std'))
+plot(djia.ap)
+
+```
+
+## 5.4 Threshold Models
+
+For stationary series, we learned in Section 3.4 that forward predicition is the same as backward prediction. This is because the variance-covariance matrix of $x_{1:n} = (x_1, \dots, x_n)$ is the same as the variance-covariance matrix of $x_{n:1}$. If the process is stationary Gaussian, then the distribution of $x_{1:n}$ is identical to the distribution of $x_{n:1}$.
+
+However, many series do not fit into this category. Example of inmfluenza deaths per 10,000 in the US from 1968 to 1978. Typically, the number of deaths tends to increase faster than it decreases, especially during epidemics. Therefore, data plotted back in time would tend to increase slower than it decreases. (You could still account for this with a model, but not a stationary model.) Also, linear Gaussian processes do not have large bursts of positive and negative changes that occur periodically in this series.
+
+The data are also *not* perfectly seasonal. The peak is typically in January but sometimes occurs in February or March. Hence seasonal ARMA models would not capture this behavior (something to think about for my modeling...).
+
+So, this would be a *nonlinear time series*. There are many modeling approaches that could use, but focus on threshold ARMA models (TARMA) here. The basic idea is of fitting local linear ARMA models.
+
+*Example 5.7 Threshold Modeling of the Influenza Series*
+
+$x_t = flu_t - flu_{t-1}$
+
+```{r chapter5point7}
+#install.packages("tsDyn")
+plot(flu, type="c")
+Months = c("J","F","M","A","M","J","J","A","S","O","N","D")
+points(flu, pch=Months, cex=.8, font=2)
+# Start analysis
+dflu = diff(flu)
+lag1.plot(dflu, corr=FALSE)
+ # scatterplot with lowess fit
+thrsh = .05
+ # threshold
+Z = ts.intersect(dflu, lag(dflu,-1), lag(dflu,-2), lag(dflu,-3),
+lag(dflu,-4) )
+ind1 = ifelse(Z[,2] < thrsh, 1, NA) # indicator < thrsh
+ind2 = ifelse(Z[,2] < thrsh, NA, 1) # indicator >= thrsh
+X1 = Z[,1]*ind1
+X2 = Z[,1]*ind2
+summary(fit1 <- lm(X1~ Z[,2:5]) )
+ # case 1
+summary(fit2 <- lm(X2~ Z[,2:5]) )
+ # case 2
+D = cbind(rep(1, nrow(Z)), Z[,2:5])
+ # design matrix
+p1 = D %*% coef(fit1)
+ # get predictions
+p2 = D %*% coef(fit2)
+prd = ifelse(Z[,2] < thrsh, p1, p2)
+plot(dflu, ylim=c(-.5,.5), type='p', pch=3)
+lines(prd)
+prde1 = sqrt(sum(resid(fit1)^2)/df.residual(fit1) )
+prde2 = sqrt(sum(resid(fit2)^2)/df.residual(fit2) )
+prde = ifelse(Z[,2] < thrsh, prde1, prde2)
+tx = time(dflu)[-(1:4)]
+xx = c(tx, rev(tx))
+yy = c(prd-2*prde, rev(prd+2*prde))
+polygon(xx, yy, border=8, col=gray(.6, alpha=.25) )
+abline(h=.05, col=4, lty=6)
+
+library(tsDyn)
+ # load package - install it if you don't have it
+# vignette("tsDyn") # for package details
+(u = setar(dflu, m=4, thDelay=0, th=.05)) # fit model and view results
+(u = setar(dflu, m=4, thDelay=0))
+ # let program fit threshold (=.036)
+BIC(u); AIC(u)
+ # if you want to try other models; m=3 works well too
+plot(u)
+ # graphics - ?plot.setar for information
+
+```
+
+
+## 5.5 Lagged Regression and Transfer Function Modeling
+
+*Example 5.8 Relating the Prewhitened SOI to the transformed recruitment series*
+
+
+```{r}
+soi.d = resid(lm(soi~time(soi), na.action=NULL)) # detrended SOI
+acf2(soi.d)
+fit = arima(soi.d, order=c(1,0,0))
+ar1 = as.numeric(coef(fit)[1])
+ # = 0.5875
+soi.pw = resid(fit)
+rec.fil = filter(rec, filter=c(1, -ar1), sides=1)
+ccf(soi.pw, rec.fil, ylab="CCF", na.action=na.omit, panel.first=grid())
+
+```
+
+*Example 5.9 Transfer Function Model for SOI and Recruitment*
+
+```{r}
+soi.d = resid(lm(soi~time(soi), na.action=NULL))
+fish = ts.intersect(rec, RL1=lag(rec,-1), SL5=lag(soi.d,-5))
+(u = lm(fish[,1]~fish[,2:3], na.action=NULL))
+acf2(resid(u))
+ # suggests ar1
+(arx = sarima(fish[,1], 1, 0, 0, xreg=fish[,2:3]))
+ # final model
+
+pred = rec + resid(arx$fit)
+ # 1-step-ahead predictions
+ts.plot(pred, rec, col=c('gray90',1), lwd=c(7,1))
+
+```
+
+
+## 5.6 Multivariate ARMAX Models
+
+*Example 5.10 Pollution Weather and Mortality*
+
+```{r}
+library(vars)
+x = cbind(cmort, tempr, part)
+summary(VAR(x, p=1, type='both'))
+ # 'both' fits constant + trend
+```
+
+*Example 5.11 Pollution Weather and Mortality*
+
+```{r}
+VARselect(x, lag.max=10, type="both")
+summary(fit <- VAR(x, p=2, type="both")) # partial results displayed
+acf(resid(fit), 52)
+serial.test(fit, lags.pt=12, type="PT.adjusted")
+(fit.pr = predict(fit, n.ahead = 24, ci = 0.95))
+ # 4 weeks ahead
+fanchart(fit.pr) # plot prediction + error
+
+```
+
+*Example 5.12 The Spliid Algorithm for Fitting Vector ARMA*
+
+```{r}
+# install.packages("marima")
+library(marima)
+model = define.model(kvar=3, ar=c(1,2), ma=c(1))
+arp = model$ar.pattern; map = model$ma.pattern
+cmort.d = resid(detr <- lm(cmort~ time(cmort), na.action=NULL))
+xdata = matrix(cbind(cmort.d, tempr, part), ncol=3) # strip ts attributes
+fit = marima(xdata, ar.pattern=arp, ma.pattern=map, means=c(0,1,1),
+penalty=1)
+innov = t(resid(fit)); plot.ts(innov); acf(innov, na.action=na.pass)
+# fitted values for cmort
+pred = ts(t(fitted(fit))[,1], start=start(cmort), freq=frequency(cmort)) +
+detr$coef[1] + detr$coef[2]*time(cmort)
+plot(pred, ylab="Cardiovascular Mortality", lwd=2, col=4); points(cmort)
+# print estimates and corresponding t^2-statistic
+short.form(fit$ar.estimates, leading=FALSE)
+short.form(fit$ar.fvalues,
+ leading=FALSE)
+short.form(fit$ma.estimates, leading=FALSE)
+short.form(fit$ma.fvalues,
+ leading=FALSE)
+fit$resid.cov
+ # estimate of noise cov matrix
+
+
+# 
+
+```
+
+
+### 5.2 Unit Root Testing
+
+*Example 5.3 Testing Unit Roots in the Glacial Varve Series*
+
+```{r}
+library(tseries)
+adf.test(log(varve), k=0) # DF test
+# Dickey-Fuller = -12.8572, Lag order = 0, p-value < 0.01
+# alternative hypothesis: stationary
+adf.test(log(varve)) # ADF test
+#Dickey-Fuller = -3.5166, Lag order = 8, p-value = 0.04071
+# alternative hypothesis: stationary
+pp.test(log(varve)) # PP test
+# Dickey-Fuller Z(alpha) = -304.5376,
+# Truncation lag parameter = 6, p-value < 0.01
+# alternative hypothesis: stationary
+```
+
+### 5.3 GARCH Models
+
+*Example 5.4 Analysis of US GNP*
+
+```{r}
+
+u = sarima(diff(log(gnp)), 1, 0, 0)
+acf2(resid(u$fit)^2, 20)
+library(fGarch)
+summary(garchFit(~arma(1,0)+garch(1,0), diff(log(gnp))))
+```
+
+*Example 5.5 GARCH Analysis of the DJIA Returns*
+
+```{r, eval=FALSE}
+library(xts)
+djiar = diff(log(djia$Close))[-1]
+acf2(djiar)
+# exhibits some autocorrelation (not shown)
+acf2(djiar^2)
+# oozes autocorrelation (not shown)
+library(fGarch)
+summary(djia.g <- garchFit(~arma(1,0)+garch(1,1), data=djiar,
+cond.dist='std'))
+plot(djia.g)
+# to see all plot options
+```
+
+*Example 5.6 APARCH Analysis of the DJIA Returns
+
+```{r, eval=FALSE}
+p_load(xts, fGarch)
+summary(djia.ap <- garchFit(~arma(1,0)+aparch(1,1), data=djiar,
+cond.dist='std'))
+plot(djia.ap)
+# to see all plot options (none shown)
+```
+
+### 5.4 Threshold Models
+
+*Example 5.7 Threshold Modeling of the Influenza Series*
+
+```{r}
+plot(flu, type="c")
+Months = c("J","F","M","A","M","J","J","A","S","O","N","D")
+points(flu, pch=Months, cex=.8, font=2)
+# Start analysis
+dflu = diff(flu)
+lag1.plot(dflu, corr=FALSE)
+# scatterplot with lowess fit
+thrsh = .05
+# threshold
+Z= ts.intersect(dflu, lag(dflu,-1), lag(dflu,-2), lag(dflu,-3),
+lag(dflu,-4) )
+ind1 = ifelse(Z[,2] < thrsh, 1, NA) # indicator < thrsh
+ind2 = ifelse(Z[,2] < thrsh, NA, 1) # indicator >= thrsh
+X1= Z[,1]*ind1
+X2= Z[,1]*ind2
+summary(fit1 <- lm(X1~ Z[,2:5]) )
+# case 1
+summary(fit2 <- lm(X2~ Z[,2:5]) )
+# case 2
+D= cbind(rep(1, nrow(Z)), Z[,2:5])
+# design matrix
+p1= D %*% coef(fit1)
+# get predictions
+p2= D %*% coef(fit2)
+prd= ifelse(Z[,2] < thrsh, p1, p2)
+plot(dflu, ylim=c(-.5,.5), type='p', pch=3)
+lines(prd)
+prde1 = sqrt(sum(resid(fit1)^2)/df.residual(fit1) )
+prde2 = sqrt(sum(resid(fit2)^2)/df.residual(fit2) )
+prde = ifelse(Z[,2] < thrsh, prde1, prde2)
+tx = time(dflu)[-(1:4)]
+xx = c(tx, rev(tx))
+yy = c(prd-2*prde, rev(prd+2*prde))
+polygon(xx, yy, border=8, col=gray(.6, alpha=.25) )
+abline(h=.05, col=4, lty=6)
+```
+
+### 5.5 Lagged Regression and Transfer Function Modeling
+
+*Example 5.8 Relating the Prewhitened SOI to the Transformed Recruitment Series*
+
+```{r}
+soi.d = resid(lm(soi~time(soi), na.action=NULL)) # detrended SOI
+acf2(soi.d)
+fit = arima(soi.d, order=c(1,0,0))
+ar1 = as.numeric(coef(fit)[1])
+# = 0.5875
+soi.pw = resid(fit)
+rec.fil = filter(rec, filter=c(1, -ar1), sides=1)
+ccf(soi.pw, rec.fil, ylab="CCF", na.action=na.omit, panel.first=grid())
+```
+
+*Example 5.9 Transfer Function Model for SOI and Recruitment*
+
+```{r}
+soi.d = resid(lm(soi~time(soi), na.action=NULL))
+fish = ts.intersect(rec, RL1=lag(rec,-1), SL5=lag(soi.d,-5))
+(u = lm(fish[,1]~fish[,2:3], na.action=NULL))
+acf2(resid(u))
+# suggests ar1
+(arx = sarima(fish[,1], 1, 0, 0, xreg=fish[,2:3]))
+# final model
+#Coefficients:
+#ar1 intercept RL1 SL5
+#0.4487 12.3323 0.8005 -21.0307
+#s.e. 0.0503 1.5746 0.0234 1.0915
+#sigma^2 estimated as 49.93
+pred = rec + resid(arx$fit)
+# 1-step-ahead predictions
+ts.plot(pred, rec, col=c('gray90',1), lwd=c(7,1))
+```
+
+### 5.6 Multivariate ARMAX Models
+
+*Example 5.10 Pollution Weather and Mortality
+
+```{r}
+library(vars)
+x = cbind(cmort, tempr, part)
+summary(VAR(x, p=1, type='both'))
+# 'both' fits constant + trend
+```
+
+*Example 5.11 Pollution, Weather and Mortality continued*
+
+```{r}
+VARselect(x, lag.max=10, type="both")
+```
+
+
+
+# Chapter 6 State Space Models
+
+This is the longest chapter in the book! It discusses state space models, which are a very general model that subsume a whole class of special cases of interest. It is analogous to linear regression for non-time series. Note, state space is aka the dynamic linear model, introduced in Kalman (1960) and Kalman and Bucy (1961)--this is the Kalman filter guy.
+
+State Space Models get their name from tracking objects in space. State is the position (from motion equations), space is for spacecraft. So, it was about $x_t$ is the location of a spacecraft and the data $y_t$ reflect informatoin that can be observed from a tracking device such as velocity and azimuth. (Azimuth is the direction of a celestial object from the observer, expressed as the angular distance from the north or south point of the horizon to the point at which a vertical circle passing through the object intersects the horizon.) Applying this to economics goes back to Harrison and Stevens (1976), Harvey and Pierse (1984), Harvey and Todd (1983), Kitagawa and Gersch (1984), Shumway and Stoffer (1982). Nonlinear treatment of state space models in Douc Moulines and Stoffer (I have this!).
+
+Focus on linear Gaussian State Space Models. Present various forms of the model, introduce the concepts of prediction, filtering and smoothing state space models and include their derivations. Explain how to do MLE and how to handle missing data. Discuss Hidden Markov Models (HMM), switching autoregressions (this is switching regimes), smoothing splines, ARMAX models, bootstrapping, stochastic volatility and state space models with switching. Finally, discuss Bayesian approach to fitting state space models with MCMC. Core ideas in 6.1-6.3.
+
+Two key principles: (1) a hidden or latent process $x_t$ called the state process and its a Markov process (so future independent of the past) and (2) the observations $y_t$ are independent of the state $x_t$. Thus, the dependence between observations is generated by states. 
+
+Note that we did cover these a little bit in my 201C Class.
+
+## 6.1 Linear Gaussian Models
+
+
+*Example 6.1 A Biomedical Example*
+
+```{r}
+plot(blood, type='o', pch=19, xlab='day', main='')
+
+```
+
+*Example 6.2 Global Warming*
+
+```{r}
+ts.plot(globtemp, globtempl, col=c(6,4), ylab='Temperature Deviations')
+```
+
+## 6.2 Filtering, Smoothing and Forecasting
+
+*Example 6.5 Prediction Filtering and Smoothing for the Local Level Model*
+
+
+```{r}
+set.seed(1); num = 50
+w = rnorm(num+1,0,1); v = rnorm(num,0,1)
+mu = cumsum(w) # state: mu[0], mu[1],..., mu[50]
+y = mu[-1] + v #
+# obs:
+# y[1],..., y[50]
+# filter and smooth (Ksmooth0 does both)
+ks = Ksmooth0(num, y, A=1, mu0=0, Sigma0=1, Phi=1, cQ=1, cR=1)
+# start figure
+par(mfrow=c(3,1)); Time = 1:num
+plot(Time, mu[-1], main='Predict', ylim=c(-5,10))
+lines(ks$xp)
+lines(ks$xp+2*sqrt(ks$Pp), lty=2, col=4)
+lines(ks$xp-2*sqrt(ks$Pp), lty=2, col=4)
+plot(Time, mu[-1], main='Filter', ylim=c(-5,10))
+lines(ks$xf)
+lines(ks$xf+2*sqrt(ks$Pf), lty=2, col=4)
+lines(ks$xf-2*sqrt(ks$Pf), lty=2, col=4)
+plot(Time, mu[-1], main='Smooth', ylim=c(-5,10))
+lines(ks$xs)
+lines(ks$xs+2*sqrt(ks$Ps), lty=2, col=4)
+lines(ks$xs-2*sqrt(ks$Ps), lty=2, col=4)
+mu[1]; ks$x0n; sqrt(ks$P0n)
+ # initial value info
+
+```
+
+## 6.3 Maximum Likelihood Estimation
+
+*Example 6.6 Newton-Raphson for Example 6.3*
+
+```{r}
+# Generate Data
+set.seed(999); num = 100
+x = arima.sim(n=num+1, list(ar=.8), sd=1)
+y = ts(x[-1] + rnorm(num,0,1))
+# Initial Estimates
+u = ts.intersect(y, lag(y,-1), lag(y,-2))
+varu = var(u); coru = cor(u)
+phi = coru[1,3]/coru[1,2]
+q = (1-phi^2)*varu[1,2]/phi
+r = varu[1,1] - q/(1-phi^2)
+(init.par = c(phi, sqrt(q), sqrt(r))) # = .91, .51, 1.03
+# Function to evaluate the likelihood
+Linn = function(para){
+phi = para[1]; sigw = para[2]; sigv = para[3]
+Sigma0 = (sigw^2)/(1-phi^2); Sigma0[Sigma0<0]=0
+kf = Kfilter0(num, y, 1, mu0=0, Sigma0, phi, sigw, sigv)
+return(kf$like)
+ }
+# Estimation (partial output shown)
+(est = optim(init.par, Linn, gr=NULL, method='BFGS', hessian=TRUE,
+control=list(trace=1, REPORT=1)))
+SE = sqrt(diag(solve(est$hessian)))
+cbind(estimate=c(phi=est$par[1],sigw=est$par[2],sigv=est$par[3]),SE)
+
+```
+
+*Example 6.7 Newton-Raphson for the Global Temperature Deviations*
+
+```{r}
+y = cbind(globtemp, globtempl); num = nrow(y); input = rep(1,num)
+A = array(rep(1,2), dim=c(2,1,num))
+mu0 = -.35; Sigma0 = 1; Phi = 1
+# Function to Calculate Likelihood
+Linn = function(para){
+cQ = para[1]
+ # sigma_w
+cR1 = para[2]
+ # 11 element of chol(R)
+cR2 = para[3]
+ # 22 element of chol(R)
+cR12 = para[4]
+ # 12 element of chol(R)
+cR = matrix(c(cR1,0,cR12,cR2),2) # put the matrix together
+drift = para[5]
+kf = Kfilter1(num,y,A,mu0,Sigma0,Phi,drift,0,cQ,cR,input)
+return(kf$like)
+ }
+# Estimation
+init.par = c(.1, .1, .1, 0, .05)
+(est = optim(init.par, Linn, NULL, method='BFGS', hessian=TRUE,
+control=list(trace=1,REPORT=1))) # output not shown
+SE = sqrt(diag(solve(est$hessian)))
+# Display estimates
+u = cbind(estimate=est$par, SE)
+rownames(u)=c('sigw','cR11', 'cR22', 'cR12', 'drift'); u
+# Smooth (first set parameters to their final estimates)
+cQ = est$par[1]
+cR1 = est$par[2]
+cR2 = est$par[3]
+cR12 = est$par[4]
+cR = matrix(c(cR1,0,cR12,cR2), 2)
+(R = t(cR)%*%cR)
+ # to view the estimated R matrix
+drift = est$par[5]
+ks = Ksmooth1(num,y,A,mu0,Sigma0,Phi,drift,0,cQ,cR,input)
+# Plot
+xsm = ts(as.vector(ks$xs), start=1880)
+rmse = ts(sqrt(as.vector(ks$Ps)), start=1880)
+plot(xsm, ylim=c(-.6, 1), ylab='Temperature Deviations')
+xx = c(time(xsm), rev(time(xsm)))
+yy = c(xsm-2*rmse, rev(xsm+2*rmse))
+polygon(xx, yy, border=NA, col=gray(.6, alpha=.25))
+lines(globtemp, type='o', pch=2, col=4, lty=6)
+lines(globtempl, type='o', pch=3, col=3, lty=6)
+
+```
+
+*Example 6.8 EM Algorithm for Example 6.3*
+
+```{r}
+library(pacman)
+p_load(nlme) # loads package nlme
+# Generate data (same as Example 6.6)
+set.seed(999); num = 100
+x = arima.sim(n=num+1, list(ar = .8), sd=1)
+y = ts(x[-1] + rnorm(num,0,1))
+# Initial Estimates (same as Example 6.6)
+u = ts.intersect(y, lag(y,-1), lag(y,-2))
+varu = var(u); coru = cor(u)
+phi = coru[1,3]/coru[1,2]
+q = (1-phi^2)*varu[1,2]/phi
+r = varu[1,1] - q/(1-phi^2)
+# EM procedure - output not shown
+(em = EM0(num, y, A=1, mu0=0, Sigma0=2.8, Phi=phi, cQ=sqrt(q), cR=sqrt(r),
+max.iter=75, tol=.00001))
+# Standard Errors (this uses nlme)
+phi = em$Phi; cq = sqrt(em$Q); cr = sqrt(em$R)
+mu0 = em$mu0; Sigma0 = em$Sigma0
+para = c(phi, cq, cr)
+Linn = function(para){ # to evaluate likelihood at estimates
+kf = Kfilter0(num, y, 1, mu0, Sigma0, para[1], para[2], para[3])
+return(kf$like)
+ }
+emhess = fdHess(para, function(para) Linn(para)) #from nlme package
+SE = sqrt(diag(solve(emhess$Hessian)))
+# Display Summary of Estimation
+estimate = c(para, em$mu0, em$Sigma0); SE = c(SE, NA, NA)
+u = cbind(estimate, SE)
+rownames(u) = c('phi','sigw','sigv','mu0','Sigma0'); u
+
+```
+
+## 6.4 Missing Data Modification
+
+*Example 6.9 Longitudinal Biomedical Data*
+
+```{r}
+y = cbind(WBC, PLT, HCT); num = nrow(y)
+# make array of obs matrices
+A = array(0, dim=c(3,3,num))
+for(k in 1:num) { if (y[k,1] > 0) A[,,k]= diag(1,3) }
+# Initial values
+mu0 = matrix(0, 3, 1); Sigma0 = diag(c(.1, .1, 1), 3)
+Phi = diag(1, 3); cQ = diag(c(.1, .1, 1), 3); cR = diag(c(.1, .1, 1), 3)
+# EM procedure - some output previously shown
+(em = EM1(num, y, A, mu0, Sigma0, Phi, cQ, cR, 100, .001))
+# Graph smoother
+ks = Ksmooth1(num, y, A, em$mu0, em$Sigma0, em$Phi, 0, 0, chol(em$Q),
+chol(em$R), 0)
+y1s = ks$xs[1,,]; y2s = ks$xs[2,,]; y3s = ks$xs[3,,]
+p1 = 2*sqrt(ks$Ps[1,1,]); p2 = 2*sqrt(ks$Ps[2,2,]); p3 = 2*sqrt(ks$Ps[3,3,])
+par(mfrow=c(3,1))
+plot(WBC, type='p', pch=19, ylim=c(1,5), xlab='day')
+lines(y1s); lines(y1s+p1, lty=2, col=4); lines(y1s-p1, lty=2, col=4)
+plot(PLT, type='p', ylim=c(3,6), pch=19, xlab='day')
+lines(y2s); lines(y2s+p2, lty=2, col=4); lines(y2s-p2, lty=2, col=4)
+plot(HCT, type='p', pch=19, ylim=c(20,40), xlab='day')
+lines(y3s); lines(y3s+p3, lty=2, col=4); lines(y3s-p3, lty=2, col=4)
+
+```
+
+## 6.5 Structural Models: Signal Extraction and Forecasting
+
+*Example 6.10 Johnson and Johnson Quarterly Earnings*
+
+```{r}
+num = length(jj)
+A = cbind(1,1,0,0)
+# Function to Calculate Likelihood
+Linn =function(para){
+Phi = diag(0,4); Phi[1,1] = para[1]
+Phi[2,]=c(0,-1,-1,-1); Phi[3,]=c(0,1,0,0); Phi[4,]=c(0,0,1,0)
+cQ1 = para[2]; cQ2 = para[3]
+ # sqrt q11 and q22
+cQ = diag(0,4); cQ[1,1]=cQ1; cQ[2,2]=cQ2
+cR = para[4]
+ # sqrt r11
+kf = Kfilter0(num, jj, A, mu0, Sigma0, Phi, cQ, cR)
+return(kf$like) }
+# Initial Parameters
+mu0 = c(.7,0,0,0); Sigma0 = diag(.04,4)
+init.par = c(1.03,.1,.1,.5)
+ # Phi[1,1], the 2 cQs and cR
+# Estimation and Results
+est = optim(init.par, Linn,NULL, method='BFGS', hessian=TRUE,
+control=list(trace=1,REPORT=1))
+SE = sqrt(diag(solve(est$hessian)))
+u = cbind(estimate=est$par, SE)
+rownames(u)=c('Phi11','sigw1','sigw2','sigv'); u
+# Smooth
+Phi = diag(0,4); Phi[1,1] = est$par[1]
+Phi[2,]=c(0,-1,-1,-1); Phi[3,]=c(0,1,0,0); Phi[4,]=c(0,0,1,0)
+cQ1 = est$par[2]; cQ2 = est$par[3]
+cQ = diag(1,4); cQ[1,1]=cQ1; cQ[2,2]=cQ2
+cR = est$par[4]
+ks = Ksmooth0(num,jj,A,mu0,Sigma0,Phi,cQ,cR)
+# Plots
+Tsm = ts(ks$xs[1,,], start=1960, freq=4)
+Ssm = ts(ks$xs[2,,], start=1960, freq=4)
+p1 = 3*sqrt(ks$Ps[1,1,]); p2 = 3*sqrt(ks$Ps[2,2,])
+par(mfrow=c(2,1))
+plot(Tsm, main='Trend Component', ylab='Trend')
+xx = c(time(jj), rev(time(jj)))
+yy = c(Tsm-p1, rev(Tsm+p1))
+polygon(xx, yy, border=NA, col=gray(.5, alpha = .3))
+plot(jj, main='Data & Trend+Season', ylab='J&J QE/Share', ylim=c(-.5,17))
+xx = c(time(jj), rev(time(jj)) )
+yy = c((Tsm+Ssm)-(p1+p2), rev((Tsm+Ssm)+(p1+p2)) )
+polygon(xx, yy, border=NA, col=gray(.5, alpha = .3))
+# Forecast
+n.ahead = 12;
+y = ts(append(jj, rep(0,n.ahead)), start=1960, freq=4)
+rmspe = rep(0,n.ahead); x00 = ks$xf[,,num]; P00 = ks$Pf[,,num]
+Q = t(cQ)%*%cQ; R = t(cR)%*%(cR)
+for (m in 1:n.ahead){
+xp = Phi%*%x00; Pp = Phi%*%P00%*%t(Phi)+Q
+sig = A%*%Pp%*%t(A)+R; K = Pp%*%t(A)%*%(1/sig)
+x00 = xp; P00 = Pp-K%*%A%*%Pp
+y[num+m] = A%*%xp; rmspe[m] = sqrt(sig) }
+plot(y, type='o', main='', ylab='J&J QE/Share', ylim=c(5,30),
+xlim=c(1975,1984))
+upp = ts(y[(num+1):(num+n.ahead)]+2*rmspe, start=1981, freq=4)
+low = ts(y[(num+1):(num+n.ahead)]-2*rmspe, start=1981, freq=4)
+xx = c(time(low), rev(time(upp)))
+yy = c(low, rev(upp))
+polygon(xx, yy, border=8, col=gray(.5, alpha = .3))
+abline(v=1981, lty=3)
+
+```
+
+## 6.6 State-Space Models with Correlated Errors
+
+*Example 6.12 Mortality, Temperature and Pollution for ARMAX model*
+
+```{r}
+fit1 = sarima(cmort, 2,0,0, xreg=time(cmort))
+acf(cbind(dmort <- resid(fit1$fit), tempr, part))
+lag2.plot(tempr, dmort, 8)
+lag2.plot(part, dmort, 8)
+trend = time(cmort) - mean(time(cmort))
+ # center time
+dcmort = resid(fit2 <- lm(cmort~trend, na.action=NULL)); fit2
+u = ts.intersect(dM=dcmort, dM1=lag(dcmort,-1), dM2=lag(dcmort,-2),
+T1=lag(tempr,-1), P=part, P4=lag(part,-4))
+# lm(dM~., data=u, na.action=NULL)
+ # and then anaylze residuals ... or
+sarima(u[,1], 0,0,0, xreg=u[,2:6])
+ # get residual analysis as a byproduct
+
+
+# for complete analysis
+trend = time(cmort) - mean(time(cmort))
+ # center time
+const = time(cmort)/time(cmort)
+ # appropriate time series of 1s
+ded = ts.intersect(M=cmort, T1=lag(tempr,-1), P=part, P4=lag(part,-4),
+trend, const)
+y = ded[,1]
+input = ded[,2:6]
+num = length(y)
+A = array(c(1,0), dim = c(1,2,num))
+# Function to Calculate Likelihood
+Linn=function(para){
+phi1=para[1]; phi2=para[2]; cR=para[3];
+ b1=para[4]
+b2=para[5];
+ b3=para[6]; b4=para[7]; alf=para[8]
+mu0 = matrix(c(0,0), 2, 1)
+Sigma0 = diag(100, 2)
+Phi = matrix(c(phi1, phi2, 1, 0), 2)
+Theta = matrix(c(phi1, phi2), 2)
+Ups = matrix(c(b1, 0, b2, 0, b3, 0, 0, 0, 0, 0), 2, 5)
+Gam = matrix(c(0, 0, 0, b4, alf), 1, 5); cQ = cR; S = cR^2
+kf = Kfilter2(num, y, A, mu0, Sigma0, Phi, Ups, Gam, Theta, cQ, cR, S, input)
+return(kf$like) }
+# Estimation
+init.par = c(phi1=.3, phi2=.3, cR=5, b1=-.2, b2=.1, b3=.05, b4=-1.6,
+alf=mean(cmort))
+ # initial parameters
+L = c( 0, 0, 1, -1, 0, 0, -2, 70)
+ # lower bound on parameters
+U = c(.5, .5, 10, 0, .5, .5, 0, 90)
+ # upper bound - used in optim
+est = optim(init.par, Linn, NULL, method='L-BFGS-B', lower=L, upper=U,
+hessian=TRUE, control=list(trace=1, REPORT=1, factr=10^8))
+SE = sqrt(diag(solve(est$hessian)))
+round(cbind(estimate=est$par, SE), 3)
+# results
+
+
+# Residual Analysis (not shown)
+phi1 = est$par[1]; phi2 = est$par[2]
+cR = est$par[3];
+ b1 = est$par[4]
+b2 = est$par[5];
+ b3 = est$par[6]
+b4 = est$par[7]; alf = est$par[8]
+mu0 = matrix(c(0,0), 2, 1); Sigma0 = diag(100, 2)
+Phi = matrix(c(phi1, phi2, 1, 0), 2)
+Theta = matrix(c(phi1, phi2), 2)
+Ups = matrix(c(b1, 0, b2, 0, b3, 0, 0, 0, 0, 0), 2, 5)
+Gam = matrix(c(0, 0, 0, b4, alf), 1, 5)
+cQ = cR
+S = cR^2
+kf= Kfilter2(num, y, A, mu0, Sigma0, Phi, Ups, Gam, Theta, cQ, cR, S,
+input)
+res = ts(as.vector(kf$innov), start=start(cmort), freq=frequency(cmort))
+
+sarima(res, 0,0,0, no.constant=TRUE)
+
+
+#alternative 
+trend = time(cmort) - mean(time(cmort))
+u = ts.intersect(M=cmort, M1=lag(cmort,-1), M2=lag(cmort,-2),
+T1=lag(tempr,-1), P=part, P4=lag(part,-4), trend)
+sarima(u[,1], 0,0,0, xreg=u[,2:7])
+ # could use lm, but it's more work
+
+```
+
+## 6.7 Bootstrapping State Space Models
+
+*Example ...*
+
+```{r}
+library(plyr) # used for displaying progress
+tol = sqrt(.Machine$double.eps) #determines convergence of optimizer
+nboot = 500
+ # number of bootstrap replicates
+y = window(qinfl, c(1953,1), c(1965,2)) # inflation
+z = window(qintr, c(1953,1), c(1965,2)) # interest
+num = length(y)
+A = array(z, dim=c(1,1,num))
+input = matrix(1,num,1)
+# Function to Calculate Likelihood
+Linn = function(para, y.data){ # pass data also
+phi = para[1]; alpha = para[2]
+b = para[3]; Ups = (1-phi)*b
+cQ = para[4]; cR = para[5]
+kf = Kfilter2(num,y.data,A,mu0,Sigma0,phi,Ups,alpha,1,cQ,cR,0,input)
+return(kf$like)
+ }
+# Parameter Estimation
+mu0 = 1; Sigma0 = .01
+init.par = c(phi=.84, alpha=-.77, b=.85, cQ=.12, cR=1.1) # initial values
+est = optim(init.par, Linn, NULL, y.data=y, method="BFGS", hessian=TRUE,
+control=list(trace=1, REPORT=1, reltol=tol))
+SE = sqrt(diag(solve(est$hessian)))
+phi = est$par[1]; alpha = est$par[2]
+b = est$par[3]; Ups = (1-phi)*b
+cQ = est$par[4]; cR = est$par[5]
+round(cbind(estimate=est$par, SE), 3)
+
+# BEGIN BOOTSTRAP
+# Run the filter at the estimates
+kf = Kfilter2(num,y,A,mu0,Sigma0,phi,Ups,alpha,1,cQ,cR,0,input)
+# Pull out necessary values from the filter and initialize
+xp = kf$xp
+innov = kf$innov
+sig = kf$sig
+K = kf$K
+e = innov/sqrt(sig)
+e.star = e
+ # initialize values
+y.star = y
+xp.star = xp
+k = 4:50
+ # hold first 3 observations fixed
+para.star = matrix(0, nboot, 5) # to store estimates
+init.par = c(.84, -.77, .85, .12, 1.1)
+pr <- progress_text()
+ # displays progress
+pr$init(nboot)
+for (i in 1:nboot){
+pr$step()
+e.star[k] = sample(e[k], replace=TRUE)
+for (j in k){ xp.star[j] = phi*xp.star[j-1] +
+Ups+K[j]*sqrt(sig[j])*e.star[j] }
+y.star[k] = z[k]*xp.star[k] + alpha + sqrt(sig[k])*e.star[k]
+est.star = optim(init.par, Linn, NULL, y.data=y.star, method="BFGS",
+control=list(reltol=tol))
+para.star[i,] = cbind(est.star$par[1], est.star$par[2], est.star$par[3],
+abs(est.star$par[4]), abs(est.star$par[5]))
+ }
+
+
+# Some summary statistics
+rmse = rep(NA,5)
+ # SEs from the bootstrap
+for(i in 1:5){rmse[i]=sqrt(sum((para.star[,i]-est$par[i])^2)/nboot)
+cat(i, rmse[i],"\n") }
+# Plot phi and sigw
+phi = para.star[,1]
+sigw = abs(para.star[,4])
+phi = ifelse(phi<0, NA, phi)
+ # any phi < 0 not plotted
+library(psych)
+ # load psych package for scatter.hist
+scatter.hist(sigw, phi, ylab=expression(phi), xlab=expression(sigma[~w]),
+smooth=FALSE, correl=FALSE, density=FALSE, ellipse=FALSE,
+title='', pch=19, col=gray(.1,alpha=.33),
+panel.first=grid(lty=2), cex.lab=1.2)
+
+```
+
+## 6.8 Smoothing Splines and the Kalman Smoother
+
+*Example 6.14 Smoothing Splines*
+
+
+```{r}
+set.seed(123)
+num = 50
+w = rnorm(num,0,.1)
+x = cumsum(cumsum(w))
+y = x + rnorm(num,0,1)
+plot.ts(x, ylab="", lwd=2, ylim=c(-1,8))
+lines(y, type='o', col=8)
+## State Space ##
+Phi = matrix(c(2,1,-1,0),2); A = matrix(c(1,0),1)
+mu0 = matrix(0,2);
+ Sigma0 = diag(1,2)
+Linn = function(para){
+sigw = para[1]; sigv = para[2]
+cQ = diag(c(sigw,0))
+kf = Kfilter0(num, y, A, mu0, Sigma0, Phi, cQ, sigv)
+return(kf$like)
+ }
+## Estimation ##
+init.par = c(.1, 1)
+(est = optim(init.par, Linn, NULL, method="BFGS", hessian=TRUE,
+control=list(trace=1,REPORT=1)))
+SE = sqrt(diag(solve(est$hessian)))
+# Summary of estimation
+estimate = est$par; u = cbind(estimate, SE)
+rownames(u) = c("sigw","sigv"); u
+# Smooth
+sigw = est$par[1]
+cQ = diag(c(sigw,0))
+sigv = est$par[2]
+ks = Ksmooth0(num, y, A, mu0, Sigma0, Phi, cQ, sigv)
+xsmoo = ts(ks$xs[1,1,]); psmoo = ts(ks$Ps[1,1,])
+upp = xsmoo+2*sqrt(psmoo); low = xsmoo-2*sqrt(psmoo)
+lines(xsmoo, col=4, lty=2, lwd=3)
+lines(upp, col=4, lty=2); lines(low, col=4, lty=2)
+lines(smooth.spline(y), lty=1, col=2)
+legend("topleft", c("Observations","State"), pch=c(1,-1), lty=1, lwd=c(1,2),
+col=c(8,1))
+legend("bottomright", c("Smoother", "GCV Spline"), lty=c(2,1), lwd=c(3,1), col = c(4,2))
+
+```
+## 6.9 Hidden Markov Models and Switching Autoregression
+
+*Example 6.16 Poisson HMM - Number of Major Earthquakes*
+
+```{r}
+library(depmixS4)
+model <- depmix(EQcount ~1, nstates=2, data=data.frame(EQcount),
+family=poisson())
+set.seed(90210)
+summary(fm <- fit(model))
+ # estimation results
+##-- Get Parameters --##
+u = as.vector(getpars(fm)) # ensure state 1 has smaller lambda
+if (u[7] <= u[8]) { para.mle = c(u[3:6], exp(u[7]), exp(u[8]))
+} else { para.mle = c(u[6:3], exp(u[8]), exp(u[7])) }
+mtrans = matrix(para.mle[1:4], byrow=TRUE, nrow=2)
+lams = para.mle[5:6]
+pi1 = mtrans[2,1]/(2 - mtrans[1,1] - mtrans[2,2]); pi2 = 1-pi1
+##-- Graphics --##
+layout(matrix(c(1,2,1,3), 2))
+par(mar = c(3,3,1,1), mgp = c(1.6,.6,0))
+# data and states
+plot(EQcount, main="", ylab='EQcount', type='h', col=gray(.7))
+text(EQcount, col=6*posterior(fm)[,1]-2, labels=posterior(fm)[,1], cex=.9)
+# prob of state 2
+plot(ts(posterior(fm)[,3], start=1900), ylab =
+expression(hat(pi)[~2]*'(t|n)')); abline(h=.5, lty=2)
+# histogram
+hist(EQcount, breaks=30, prob=TRUE, main="")
+xvals = seq(1,45)
+u1 = pi1*dpois(xvals, lams[1])
+u2 = pi2*dpois(xvals, lams[2])
+lines(xvals, u1, col=4);
+ lines(xvals, u2, col=2)
+##-- Bootstap --##
+# function to generate data
+pois.HMM.generate_sample = function(n,m,lambda,Mtrans,StatDist=NULL){
+# n = data length, m = number of states, Mtrans = transition matrix,
+# StatDist = stationary distn
+if(is.null(StatDist)) StatDist = solve(t(diag(m)-Mtrans +1),rep(1,m))
+mvect = 1:m
+state = numeric(n)
+state[1] = sample(mvect ,1, prob=StatDist)
+for (i in 2:n)
+state[i] = sample(mvect ,1,prob=Mtrans[state[i-1] ,])
+y = rpois(n,lambda=lambda[state ])
+list(y= y, state= state)
+ }
+# start it up
+set.seed(10101101)
+
+nboot = 100
+nobs = length(EQcount)
+para.star = matrix(NA, nrow=nboot, ncol = 6)
+for (j in 1:nboot){
+x.star = pois.HMM.generate_sample(n=nobs, m=2, lambda=lams, Mtrans=mtrans)$y
+model <- depmix(x.star ~1, nstates=2, data=data.frame(x.star),
+family=poisson())
+u = as.vector(getpars(fit(model, verbose=0)))
+# make sure state 1 is the one with the smaller intensity parameter
+if (u[7] <= u[8]) { para.star[j,] = c(u[3:6], exp(u[7]), exp(u[8])) }
+else { para.star[j,] = c(u[6:3], exp(u[8]), exp(u[7])) }
+ }
+# bootstrapped std errors
+SE = sqrt(apply(para.star,2,var) +
+(apply(para.star,2,mean)-para.mle)^2)[c(1,4:6)]
+names(SE)=c('seM11/M12', 'seM21/M22', 'seLam1', 'seLam2'); SE
+library(depmixS4)
+y = ts(sp500w, start=2003, freq=52)
+ # make data depmix friendly
+mod3 <- depmix(y~1, nstates=3, data=data.frame(y))
+set.seed(2)
+summary(fm3 <- fit(mod3))
+##-- Graphics --##
+layout(matrix(c(1,2, 1,3), 2), heights=c(1,.75))
+par(mar=c(2.5,2.5,.5,.5), mgp=c(1.6,.6,0))
+plot(y, main="", ylab='S&P500 Weekly Returns', col=gray(.7),
+ylim=c(-.11,.11))
+culer = 4-posterior(fm3)[,1]; culer[culer==3]=4 # switch labels 1 and 3
+text(y, col=culer, labels=4-posterior(fm3)[,1])
+##-- MLEs --##
+para.mle = as.vector(getpars(fm3)[-(1:3)])
+permu = matrix(c(0,0,1,0,1,0,1,0,0), 3,3)
+ # for the label switch
+(mtrans.mle = permu%*%round(t(matrix(para.mle[1:9],3,3)),3)%*%permu)
+(norms.mle = round(matrix(para.mle[10:15],2,3),3)%*%permu)
+acf(y^2, xlim=c(.02,.5), ylim=c(-.09,.5), panel.first=grid(lty=2) )
+hist(y, 25, prob=TRUE, main='')
+culer=c(1,2,4); pi.hat = colSums(posterior(fm3)[-1,2:4])/length(y)
+for (i in 1:3) { mu=norms.mle[1,i]; sig = norms.mle[2,i]
+x = seq(-.15,.12, by=.001)
+lines(x, pi.hat[4-i]*dnorm(x, mean=mu, sd=sig), col=culer[i])
+ }
+##-- Bootstrap --##
+set.seed(666); n.obs = length(y); n.boot = 100
+para.star = matrix(NA, nrow=n.boot, ncol = 15)
+respst <- para.mle[10:15]; trst <- para.mle[1:9]
+for (nb in 1:n.boot) {
+  mod <- simulate(mod3)
+y.star = as.vector(mod@response[[1]][[1]]@y)
+dfy = data.frame(y.star)
+mod.star <- depmix(y.star~1, data=dfy, respst=respst, trst=trst, nst=3)
+fm.star = fit(mod.star, emcontrol=em.control(tol = 1e-5), verbose=FALSE)
+para.star[nb,] = as.vector(getpars(fm.star)[-(1:3)])
+}
+
+SE = sqrt(apply(para.star,2,var) + (apply(para.star,2,mean)-para.mle)^2)
+(SE.mtrans.mle = permu%*%round(t(matrix(SE[1:9],3,3)),3)%*%permu)
+(SE.norms.mle = round(matrix(SE[10:15], 2,3),3)%*%permu)
+
+
+```
+
+*Example 6.18 Switching AR - Influenza Mortality*
+
+```{r, eval = FALSE}
+library(MSwM)
+set.seed(90210)
+dflu = diff(flu)
+model = lm(dflu~ 1)
+mod = msmFit(model, k=2, p=2, sw=rep(TRUE,4))
+ # 2 regimes, AR(2)s
+summary(mod)
+plotProb(mod, which=3)
+```
+
+## 6.10 Dynamic Linear Models with Switching
+
+*Example 6.22 Analysis of the Influenza Data*
+
+```{r}
+y = as.matrix(flu); num = length(y); nstate = 4;
+M1 = as.matrix(cbind(1,0,0,1)) # obs matrix normal
+M2 = as.matrix(cbind(1,0,1,1)) # obs matrix flu epi
+prob = matrix(0,num,1); yp = y # to store pi2(t|t-1) & y(t|t-1)
+xfilter = array(0, dim=c(nstate,1,num)) # to store x(t|t)
+# Function to Calculate Likelihood
+Linn = function(para){
+alpha1 = para[1]; alpha2 = para[2]; beta0 = para[3]
+sQ1 = para[4]; sQ2 = para[5]; like=0
+xf = matrix(0, nstate, 1) # x filter
+xp = matrix(0, nstate, 1) # x pred
+Pf = diag(.1, nstate)
+ # filter cov
+Pp = diag(.1, nstate)
+ # pred cov
+pi11 <- .75 -> pi22; pi12 <- .25 -> pi21; pif1 <- .5 -> pif2
+phi = matrix(0, nstate, nstate)
+phi[1,1] = alpha1; phi[1,2] = alpha2; phi[2,1]=1; phi[4,4]=1
+Ups = as.matrix(rbind(0,0,beta0,0))
+Q = matrix(0,nstate,nstate)
+Q[1,1] = sQ1^2; Q[3,3] = sQ2^2; R=0 # R=0 in final model
+# begin filtering #
+for(i in 1:num){
+xp = phi%*%xf + Ups; Pp = phi%*%Pf%*%t(phi) + Q
+sig1 = as.numeric(M1%*%Pp%*%t(M1) + R)
+sig2 = as.numeric(M2%*%Pp%*%t(M2) + R)
+k1 = Pp%*%t(M1)/sig1; k2 = Pp%*%t(M2)/sig2
+e1 = y[i]-M1%*%xp; e2 = y[i]-M2%*%xp
+pip1 = pif1*pi11 + pif2*pi21; pip2 = pif1*pi12 + pif2*pi22
+den1 = (1/sqrt(sig1))*exp(-.5*e1^2/sig1)
+den2 = (1/sqrt(sig2))*exp(-.5*e2^2/sig2)
+denm = pip1*den1 + pip2*den2
+pif1 = pip1*den1/denm; pif2 = pip2*den2/denm
+pif1 = as.numeric(pif1); pif2 = as.numeric(pif2)
+e1 = as.numeric(e1); e2=as.numeric(e2)
+xf = xp + pif1*k1*e1 + pif2*k2*e2
+eye = diag(1, nstate)
+Pf = pif1*(eye-k1%*%M1)%*%Pp + pif2*(eye-k2%*%M2)%*%Pp
+like = like - log(pip1*den1 + pip2*den2)
+prob[i]<<-pip2; xfilter[,,i]<<-xf; innov.sig<<-c(sig1,sig2)
+yp[i]<<-ifelse(pip1 > pip2, M1%*%xp, M2%*%xp) }
+return(like)
+ }
+# Estimation
+alpha1 = 1.4; alpha2 = -.5; beta0 = .3; sQ1 = .1; sQ2 = .1
+init.par = c(alpha1, alpha2, beta0, sQ1, sQ2)
+(est = optim(init.par, Linn, NULL, method='BFGS', hessian=TRUE,
+control=list(trace=1,REPORT=1)))
+SE = sqrt(diag(solve(est$hessian)))
+u = cbind(estimate=est$par, SE)
+rownames(u)=c('alpha1','alpha2','beta0','sQ1','sQ2'); u
+
+# Graphics
+predepi = ifelse(prob<.5,0,1); k = 6:length(y)
+Time = time(flu)[k]
+regime = predepi[k]+1
+par(mfrow=c(3,1), mar=c(2,3,1,1)+.1)
+plot(Time, y[k], type="n", ylab="")
+grid(lty=2); lines(Time, y[k], col=gray(.7))
+text(Time, y[k], col=regime, labels=regime, cex=1.1)
+text(1979,.95,"(a)")
+plot(Time, xfilter[1,,k], type="n", ylim=c(-.1,.4), ylab="")
+grid(lty=2); lines(Time, xfilter[1,,k])
+lines(Time, xfilter[3,,k]); lines(Time, xfilter[4,,k])
+text(1979,.35,"(b)")
+plot(Time, y[k], type="n",
+ ylim=c(.1,.9),ylab="")
+grid(lty=2); points(Time, y[k], pch=19)
+prde1 = 2*sqrt(innov.sig[1]); prde2 = 2*sqrt(innov.sig[2])
+prde = ifelse(predepi[k]<.5, prde1,prde2)
+xx = c(Time, rev(Time))
+yy = c(yp[k]-prde, rev(yp[k]+prde))
+polygon(xx, yy, border=8, col=gray(.6, alpha=.3))
+text(1979,.85,"(c)")
+
+```
+
+
+## Stochastic Volatility
+
+*Example 6.23 Analysis of the New York Stock Exchange Returns*
+
+```{r, eval = FALSE}
+y = log(nyse^2)
+num = length(y)
+# Initial Parameters
+phi0 = 0; phi1 =.95; sQ =.2; alpha = mean(y)
+sR0 = 1; mu1 = -3; sR1 =2
+init.par = c(phi0, phi1, sQ, alpha, sR0, mu1, sR1)
+# Innovations Likelihood
+Linn = function(para){
+phi0 = para[1]; phi1 = para[2]; sQ = para[3]; alpha = para[4]
+sR0 = para[5]; mu1 = para[6]; sR1 = para[7]
+sv = SVfilter(num, y, phi0, phi1, sQ, alpha, sR0, mu1, sR1)
+return(sv$like)
+ }
+# Estimation
+(est = optim(init.par, Linn, NULL, method='BFGS', hessian=TRUE,
+control=list(trace=1,REPORT=1)))
+SE = sqrt(diag(solve(est$hessian)))
+u = cbind(estimates=est$par, SE)
+rownames(u)=c('phi0','phi1','sQ','alpha','sigv0','mu1','sigv1'); u
+# Graphics (need filters at the estimated parameters)
+phi0 = est$par[1]; phi1 = est$par[2]; sQ = est$par[3]; alpha = est$par[4]
+sR0 = est$par[5]; mu1 = est$par[6]; sR1 = est$par[7]
+sv = SVfilter(num,y,phi0,phi1,sQ,alpha,sR0,mu1,sR1)
+# densities plot (f is chi-sq, fm is fitted mixture)
+x = seq(-15,6,by=.01)
+f = exp(-.5*(exp(x)-x))/(sqrt(2*pi))
+f0 = exp(-.5*(x^2)/sR0^2)/(sR0*sqrt(2*pi))
+f1 = exp(-.5*(x-mu1)^2/sR1^2)/(sR1*sqrt(2*pi))
+fm = (f0+f1)/2
+plot(x, f, type='l'); lines(x, fm, lty=2, lwd=2)
+dev.new(); Time=701:1100
+plot (Time, nyse[Time], type='l', col=4, lwd=2, ylab='', xlab='',
+ylim=c(-.18,.12))
+lines(Time, sv$xp[Time]/10, lwd=2, col=6)
+
+```
+
+*Example 6.24 Analysis of the US GNP Growth Rate*
+
+
+```{r, Chapter624}
+n.boot = 500
+ # number of bootstrap replicates
+tol = sqrt(.Machine$double.eps) # convergence tolerance
+gnpgr = diff(log(gnp))
+fit = arima(gnpgr, order=c(1,0,0))
+y = as.matrix(log(resid(fit)^2))
+num = length(y)
+plot.ts(y, ylab='')
+# Initial Parameters
+phi1 = .9; sQ = .5; alpha = mean(y); sR0 = 1; mu1 = -3; sR1 = 2.5
+init.par = c(phi1, sQ, alpha, sR0, mu1, sR1)
+# Innovations Likelihood
+Linn = function(para, y.data){
+phi1 = para[1]; sQ = para[2]; alpha = para[3]
+sR0 = para[4]; mu1 = para[5];
+ sR1 = para[6]
+sv = SVfilter(num, y.data, 0, phi1, sQ, alpha, sR0, mu1, sR1)
+return(sv$like)
+ }
+# Estimation
+(est = optim(init.par, Linn, NULL, y.data=y, method='BFGS', hessian=TRUE,
+control=list(trace=1,REPORT=1)))
+SE = sqrt(diag(solve(est$hessian)))
+u = rbind(estimates=est$par, SE)
+colnames(u)=c('phi1','sQ','alpha','sig0','mu1','sig1'); round(u, 3)
+# Bootstrap
+para.star = matrix(0, n.boot, 6)
+ # to store parameter estimates
+for (jb in 1:n.boot){
+cat('iteration:', jb, '\n')
+phi1 = est$par[1]; sQ = est$par[2]; alpha = est$par[3]
+sR0 = est$par[4]; mu1 = est$par[5]; sR1 = est$par[6]
+Q = sQ^2; R0 = sR0^2; R1 = sR1^2
+sv = SVfilter(num, y, 0, phi1, sQ, alpha, sR0, mu1, sR1)
+sig0 = sv$Pp+R0; sig1 = sv$Pp+R1;
+K0 = sv$Pp/sig0; K1 = sv$Pp/sig1
+inn0 = y-sv$xp-alpha; inn1 = y-sv$xp-mu1-alpha
+den1 = (1/sqrt(sig1))*exp(-.5*inn1^2/sig1)
+den0 = (1/sqrt(sig0))*exp(-.5*inn0^2/sig0)
+fpi1 = den1/(den0+den1)
+# start resampling at t=4
+e0 = inn0/sqrt(sig0); e1 = inn1/sqrt(sig1)
+indx = sample(4:num, replace=TRUE)
+sinn = cbind(c(e0[1:3], e0[indx]), c(e1[1:3], e1[indx]))
+eF = matrix(c(phi1, 1, 0, 0), 2, 2)
+xi = cbind(sv$xp,y) # initialize
+for (i in 4:num){
+ # generate boot sample
+G = matrix(c(0, alpha+fpi1[i]*mu1), 2, 1)
+h21 = (1-fpi1[i])*sqrt(sig0[i]); h11 = h21*K0[i]
+h22 = fpi1[i]*sqrt(sig1[i]); h12 = h22*K1[i]
+H = matrix(c(h11,h21,h12,h22),2,2)
+xi[i,] = t(eF%*%as.matrix(xi[i-1,],2) + G + H%*%as.matrix(sinn[i,],2))}
+# Estimates from boot data
+y.star = xi[,2]
+phi1=.9; sQ=.5; alpha=mean(y.star); sR0=1; mu1=-3; sR1=2.5
+init.par = c(phi1, sQ, alpha, sR0, mu1, sR1)
+ # same as for data
+est.star = optim(init.par, Linn, NULL, y.data=y.star, method='BFGS',
+control=list(reltol=tol))
+para.star[jb,] = cbind(est.star$par[1], abs(est.star$par[2]),
+est.star$par[3], abs(est.star$par[4]), est.star$par[5],
+abs(est.star$par[6])) }
+# Some summary statistics and graphics
+rmse = rep(NA,6) # SEs from the bootstrap
+for(i in 1:6){
+rmse[i] = sqrt(sum((para.star[,i]-est$par[i])^2)/n.boot)
+cat(i, rmse[i],'\n') }
+dev.new(); phi = para.star[,1]
+hist(phi, 15, prob=TRUE, main='', xlim=c(.4,1.2), xlab='')
+xx = seq(.4, 1.2, by=.01)
+lines(xx, dnorm(xx, mean=u[1,1], sd=u[2,1]), lty='dashed', lwd=2)
+
+```
+
+## 6.12 Bayesian Analysis of State Space Models
+
+*Example 6.26 Local Level Model*
+
+```{r, eval = FALSE}
+##-- Notation --##
+# y(t) = x(t) + v(t); v(t) ~ iid N(0,V)
+# x(t) = x(t-1) + w(t); w(t) ~ iid N(0,W)
+# priors: x(0) ~ N(m0,C0); V ~ IG(a,b); W ~ IG(c,d)
+# FFBS: x(t|t) ~ N(m,C); x(t|n) ~ N(mm,CC); x(t|t+1) ~ N(a,R)
+
+ffbs = function(y,V,W,m0,C0){
+n = length(y); a = rep(0,n); R = rep(0,n)
+m = rep(0,n);
+C = rep(0,n); B = rep(0,n-1)
+H = rep(0,n-1); mm = rep(0,n); CC = rep(0,n)
+x = rep(0,n); llike = 0.0
+for (t in 1:n){
+if(t==1){a[1] = m0; R[1] = C0 + W
+}else{ a[t] = m[t-1]; R[t] = C[t-1] + W }
+f = a[t]
+Q = R[t] + V
+A = R[t]/Q
+m[t]
+ = a[t]+A*(y[t]-f)
+C[t]
+ = R[t]-Q*A**2
+B[t-1] = C[t-1]/R[t]
+H[t-1] = C[t-1]-R[t]*B[t-1]**2
+llike = llike + dnorm(y[t],f,sqrt(Q),log=TRUE) }
+mm[n] = m[n]; CC[n] = C[n]
+x[n] = rnorm(1,m[n],sqrt(C[n]))
+for (t in (n-1):1){
+mm[t] = m[t] + C[t]/R[t+1]*(mm[t+1]-a[t+1])
+CC[t] = C[t] - (C[t]^2)/(R[t+1]^2)*(R[t+1]-CC[t+1])
+x[t] = rnorm(1,m[t]+B[t]*(x[t+1]-a[t+1]),sqrt(H[t]))
+ }
+return(list(x=x,m=m,C=C,mm=mm,CC=CC,llike=llike))
+ }
+# Simulate states and data
+set.seed(1); W = 0.5; V = 1.0
+n = 100; m0 = 0.0; C0 = 10.0; x0 = 0
+w = rnorm(n,0,sqrt(W))
+v = rnorm(n,0,sqrt(V))
+x = y = rep(0,n)
+x[1] = x0 + w[1]
+y[1] = x[1] + v[1]
+for (t in 2:n){
+  x[t] = x[t-1] + w[t]
+y[t] = x[t] + v[t]
+ }
+# actual smoother (for plotting)
+ks = Ksmooth0(num=n, y, A=1, m0, C0, Phi=1, cQ=sqrt(W), cR=sqrt(V))
+xsmooth = as.vector(ks$xs)
+#
+run = ffbs(y,V,W,m0,C0)
+m = run$m; C = run$C; mm = run$mm
+CC = run$CC; L1 = m-2*C; U1 = m+2*C
+L2 = mm-2*CC; U2 = mm+2*CC
+N = 50
+Vs = seq(0.1,2,length=N)
+Ws = seq(0.1,2,length=N)
+likes = matrix(0,N,N)
+for (i in 1:N){
+for (j in 1:N){
+V = Vs[i]
+W = Ws[j]
+run = ffbs(y,V,W,m0,C0)
+likes[i,j] = run$llike } }
+# Hyperparameters
+a = 0.01; b = 0.01; c = 0.01; d = 0.01
+# MCMC step
+set.seed(90210)
+burn = 10; M = 1000
+niter = burn + M
+V1 = V; W1 = W
+draws = NULL
+all_draws = NULL
+for (iter in 1:niter){
+run = ffbs(y,V1,W1,m0,C0)
+x = run$x
+V1 = 1/rgamma(1,a+n/2,b+sum((y-x)^2)/2)
+W1 = 1/rgamma(1,c+(n-1)/2,d+sum(diff(x)^2)/2)
+draws = rbind(draws,c(V1,W1,x))
+ }
+all_draws = draws[,1:2]
+q025 = function(x){quantile(x,0.025)}
+q975 = function(x){quantile(x,0.975)}
+draws = draws[(burn+1):(niter),]
+xs = draws[,3:(n+2)]
+lx = apply(xs,2,q025)
+mx = apply(xs,2,mean)
+ux = apply(xs,2,q975)
+## plot of the data
+par(mfrow=c(2,2), mgp=c(1.6,.6,0), mar=c(3,3.2,1,1))
+ts.plot(ts(x), ts(y), ylab='', col=c(1,8), lwd=2)
+points(y)
+legend(0, 11, legend=c("x(t)","y(t)"), lty=1, col=c(1,8), lwd=2, bty="n",
+pch=c(-1,1))
+contour(Vs, Ws, exp(likes), xlab=expression(sigma[v]^2),
+ylab=expression(sigma[w]^2), drawlabels=FALSE, ylim=c(0,1.2))
+points(draws[,1:2], pch=16, col=rgb(.9,0,0,0.3), cex=.7)
+hist(draws[,1], ylab="Density",main="", xlab=expression(sigma[v]^2))
+abline(v=mean(draws[,1]), col=3, lwd=3)
+hist(draws[,2],main="", ylab="Density", xlab=expression(sigma[w]^2))
+abline(v=mean(draws[,2]), col=3, lwd=3)
+## plot states
+par(mgp=c(1.6,.6,0), mar=c(2,1,.5,0)+.5)
+plot(ts(mx), ylab='', type='n', ylim=c(min(y),max(y)))
+grid(lty=2); points(y)
+lines(xsmooth, lwd=4, col=rgb(1,0,1,alpha=.4))
+lines(mx, col= 4)
+xx=c(1:100, 100:1)
+yy=c(lx, rev(ux))
+polygon(xx, yy, border=NA, col= gray(.6,alpha=.2))
+lines(y, col=gray(.4))
+legend('topleft', c('true smoother', 'data', 'posterior mean', '95% of
+draws'), lty=1, lwd=c(3,1,1,10), pch=c(-1,1,-1,-1), col=c(6,
+gray(.4) ,4, gray(.6, alpha=.5)), bg='white' )
+
+```
+
+*Example 6.27 Structural Model*
+
+```{r}
+library(plyr)
+ # used to view progress (install it if you don't have it)
+y = jj
+### setup - model and initial parameters
+set.seed(90210)
+n = length(y)
+F = c(1,1,0,0)
+ # this is A
+G = diag(0,4)
+ # G is Phi
+G[1,1] = 1.03
+G[2,] = c(0,-1,-1,-1); G[3,]=c(0,1,0,0); G[4,]=c(0,0,1,0)
+a1 = rbind(.7,0,0,0) # this is mu0
+R1 = diag(.04,4)
+ # this is Sigma0
+V = .1
+W11 = .1
+W22 = .1
+##-- FFBS --##
+ffbs = function(y,F,G,V,W11,W22,a1,R1){
+n = length(y)
+Ws = diag(c(W11,W22,1,1)) # this is Q with 1s as a device only
+iW = diag(1/diag(Ws),4)
+a = matrix(0,n,4)
+ # this is m_t
+R = array(0,c(n,4,4))
+ # this is V_t
+m = matrix(0,n,4)
+C = array(0,c(n,4,4))
+a[1,] = a1[,1]
+R[1,,] = R1
+f = t(F)%*%a[1,]
+Q = t(F)%*%R[1,,]%*%F + V
+A = R[1,,]%*%F/Q[1,1]
+m[1,] = a[1,]+A%*%(y[1]-f)
+C[1,,] = R[1,,]-A%*%t(A)*Q[1,1]
+for (t in 2:n){
+a[t,] = G%*%m[t-1,]
+R[t,,] = G%*%C[t-1,,]%*%t(G) + Ws
+f = t(F)%*%a[t,]
+Q = t(F)%*%R[t,,]%*%F + V
+A = R[t,,]%*%F/Q[1,1]
+m[t,] = a[t,] + A%*%(y[t]-f)
+C[t,,] = R[t,,] - A%*%t(A)*Q[1,1]
+ }
+xb = matrix(0,n,4)
+xb[n,] = m[n,] + t(chol(C[n,,]))%*%rnorm(4)
+for (t in (n-1):1){
+iC = solve(C[t,,])
+CCC = solve(t(G)%*%iW%*%G + iC)
+mmm = CCC%*%(t(G)%*%iW%*%xb[t+1,] + iC%*%m[t,])
+xb[t,] = mmm + t(chol(CCC))%*%rnorm(4) }
+return(xb)
+ }
+##-- Prior hyperparameters --##
+# b0 = 0
+ # mean for beta = phi -1
+# B0 = Inf # var for beta (non-informative => use OLS for sampling beta)
+n0 = 10 # use same for all- the prior is 1/Gamma(n0/2, n0*s20_/2)
+s20v = .001 # for V
+s20w =.05
+ # for Ws
+##-- MCMC scheme --##
+set.seed(90210)
+burnin = 100
+step = 10
+M = 1000
+niter = burnin+step*M
+pars = matrix(0,niter,4)
+xbs = array(0,c(niter,n,4))
+pr <- progress_text()
+ # displays progress
+pr$init(niter)
+for (iter in 1:niter){
+xb = ffbs(y,F,G,V,W11,W22,a1,R1)
+u = xb[,1]
+yu = diff(u); xu = u[-n]
+ # for phihat and se(phihat)
+regu = lm(yu~0+xu)
+ # est of beta = phi-1
+phies = as.vector(coef(summary(regu)))[1:2] + c(1,0) # phi estimate and SE
+dft = df.residual(regu)
+G[1,1] = phies[1] + rt(1,dft)*phies[2] # use a t
+V = 1/rgamma(1, (n0+n)/2, (n0*s20v/2) + sum((y-xb[,1]-xb[,2])^2)/2)
+W11 = 1/rgamma(1, (n0+n-1)/2, (n0*s20w/2) +
+sum((xb[-1,1]-phies[1]*xb[-n,1])^2)/2)
+W22 = 1/rgamma(1, (n0+ n-3)/2, (n0*s20w/2) + sum((xb[4:n,2] +
+xb[3:(n-1),2]+ xb[2:(n-2),2] +xb[1:(n-3),2])^2)/2)
+xbs[iter,,] = xb
+pars[iter,] = c(G[1,1], sqrt(V), sqrt(W11), sqrt(W22))
+pr$step()
+ }
+# Plot results
+ind = seq(burnin+1,niter,by=step)
+names= c(expression(phi), expression(sigma[v]), expression(sigma[w~11]),
+expression(sigma[w~22]))
+dev.new(height=5)
+par(mfcol=c(3,4), mar=c(2,2,.25,0)+.75, mgp=c(1.6,.6,0), oma=c(0,0,1,0))
+for (i in 1:4){
+plot.ts(pars[ind,i],xlab="iterations", ylab="trace", main="")
+mtext(names[i], side=3, line=.5, cex=1)
+acf(pars[ind,i],main="", lag.max=25, xlim=c(1,25), ylim=c(-.4,.4))
+hist(pars[ind,i],main="",xlab="")
+abline(v=mean(pars[ind,i]), lwd=2, col=3) }
+par(mfrow=c(2,1), mar=c(2,2,0,0)+.7, mgp=c(1.6,.6,0))
+mxb = cbind(apply(xbs[ind,,1],2,mean), apply(xbs[,,2],2,mean))
+lxb = cbind(apply(xbs[ind,,1],2,quantile,0.005),
+apply(xbs[ind,,2],2,quantile,0.005))
+uxb = cbind(apply(xbs[ind,,1],2,quantile,0.995),
+apply(xbs[ind,,2],2,quantile,0.995))
+mxb = ts(cbind(mxb,rowSums(mxb)), start = tsp(jj)[1], freq=4)
+lxb = ts(cbind(lxb,rowSums(lxb)), start = tsp(jj)[1], freq=4)
+uxb = ts(cbind(uxb,rowSums(uxb)), start = tsp(jj)[1], freq=4)
+names=c('Trend', 'Season', 'Trend + Season')
+L = min(lxb[,1])-.01; U = max(uxb[,1]) +.01
+plot(mxb[,1], ylab=names[1], ylim=c(L,U), type='n')
+grid(lty=2); lines(mxb[,1])
+xx=c(time(jj), rev(time(jj)))
+yy=c(lxb[,1], rev(uxb[,1]))
+polygon(xx, yy, border=NA, col=gray(.4, alpha = .2))
+L = min(lxb[,3])-.01; U = max(uxb[,3]) +.01
+plot(mxb[,3], ylab=names[3], ylim=c(L,U), type='n')
+grid(lty=2); lines(mxb[,3])
+xx=c(time(jj), rev(time(jj)))
+yy=c(lxb[,3], rev(uxb[,3]))
+polygon(xx, yy, border=NA, col=gray(.4, alpha = .2))
+
+```
+
+
+
+# Chapter 7 Statistical Methods in the Frequency Domain
+
+## 7.1 Introduction
+
+```{r}
+# figure 7.1
+x = matrix(0, 128, 6)
+for (i in 1:6) { x[,i] = rowMeans(fmri[[i]]) }
+colnames(x) = c("Brush", "Heat", "Shock", "Brush", "Heat", "Shock")
+plot.ts(x, main="")
+mtext("Awake", side=3, line=1.2, adj=.05, cex=1.2)
+mtext("Sedated", side=3, line=1.2, adj=.85, cex=1.2)
+
+# figure 7.2
+attach(eqexp)
+ # so you can use the names of the series
+P = 1:1024; S = P+1024
+x = cbind(EQ5[P], EQ6[P], EX5[P], EX6[P], NZ[P], EQ5[S], EQ6[S], EX5[S],
+EX6[S], NZ[S])
+x.name = c("EQ5","EQ6","EX5","EX6","NZ")
+colnames(x) = c(x.name, x.name)
+plot.ts(x, main="")
+mtext("P waves", side=3, line=1.2, adj=.05, cex=1.2)
+mtext("S waves", side=3, line=1.2, adj=.85, cex=1.2)
+
+
+```
+
+## 7.2 Spectral Matrices and Likelihood Functions
+
+
+## 7.3 Regression for Jointly Stationary Series
+
+*Example 7.1 Predicting Lake Shasta Inflow* 
+
+```{r}
+plot.ts(climhyd)
+ # Figure 7.3
+Y = climhyd
+ # Y holds the transformed series
+Y[,6] = log(Y[,6]) # log inflow
+Y[,5] = sqrt(Y[,5]) # sqrt precipitation
+L = 25; M = 100; alpha = .001; fdr = .001
+nq = 2
+ # number of inputs (Temp and Precip)
+# Spectral Matrix
+Yspec = mvspec(Y, spans=L, kernel="daniell", detrend=TRUE, demean=FALSE,
+taper=.1)
+n = Yspec$n.used
+ # effective sample size
+Fr = Yspec$freq
+ # fundamental freqs
+n.freq = length(Fr)
+ # number of frequencies
+Yspec$bandwidth*sqrt(12) # = 0.050 - the bandwidth
+# Coherencies
+Fq = qf(1-alpha, 2, L-2)
+cn = Fq/(L-1+Fq)
+plt.name = c("(a)","(b)","(c)","(d)","(e)","(f)")
+dev.new(); par(mfrow=c(2,3), cex.lab=1.2)
+# The coherencies are listed as 1,2,...,15=choose(6,2)
+for (i in 11:15){
+plot(Fr, Yspec$coh[,i], type="l", ylab="Sq Coherence", xlab="Frequency",
+ylim=c(0,1), main=c("Inflow with", names(climhyd[i-10])))
+abline(h = cn); text(.45,.98, plt.name[i-10], cex=1.2) }
+# Multiple Coherency
+coh.15 = stoch.reg(Y, cols.full = c(1,5), cols.red = NULL, alpha, L, M,
+plot.which = "coh")
+text(.45 ,.98, plt.name[6], cex=1.2)
+title(main = c("Inflow with", "Temp and Precip"))
+# Partial F (called eF; avoid use of F alone)
+numer.df = 2*nq; denom.df = Yspec$df-2*nq
+dev.new()
+par(mfrow=c(3,1), mar=c(3,3,2,1)+.5, mgp = c(1.5,0.4,0), cex.lab=1.2)
+out.15 = stoch.reg(Y, cols.full = c(1,5), cols.red = 5, alpha, L, M,
+plot.which = "F.stat")
+eF = out.15$eF
+pvals = pf(eF, numer.df, denom.df, lower.tail = FALSE)
+pID = FDR(pvals, fdr); abline(h=c(eF[pID]), lty=2)
+title(main = "Partial F Statistic")
+# Regression Coefficients
+S = seq(from = -M/2+1, to = M/2 - 1, length = M-1)
+plot(S, coh.15$Betahat[,1], type = "h", xlab = "", ylab = names(climhyd[1]),
+ylim = c(-.025, .055), lwd=2)
+abline(h=0); title(main = "Impulse Response Functions")
+plot(S, coh.15$Betahat[,2], type = "h", xlab = "Index", ylab =
+names(climhyd[5]), ylim = c(-.015, .055), lwd=2)
+abline(h=0)
+
+```
+
+## 7.4 Regression with Deterministic Inputs
+
+*Example 7.2 An Infrasonic Signal from a Nuclear Explosion.*
+
+```{r}
+attach(beamd)
+tau = rep(0,3)
+u = ccf(sensor1, sensor2, plot=FALSE)
+tau[1] = u$lag[which.max(u$acf)]
+ # 17
+u = ccf(sensor3, sensor2, plot=FALSE)
+tau[3] = u$lag[which.max(u$acf)]
+ # -22
+Y = ts.union(lag(sensor1,tau[1]), lag(sensor2, tau[2]), lag(sensor3, tau[3]))
+Y = ts.union(Y, rowMeans(Y))
+colnames(Y) = c('sensor1', 'sensor2', 'sensor3', 'beam')
+plot.ts(Y)
+
+```
+
+*Example 7.4 Detecting the Infrasonic Signal Using ANOPOW*
+
+```{r}
+attach(beamd)
+L = 9; fdr = .001; N = 3
+Y = cbind(beamd, beam=rowMeans(beamd) )
+n = nextn(nrow(Y))
+Y.fft = mvfft(as.ts(Y))/sqrt(n)
+Df = Y.fft[,1:3] # fft of the data
+Bf = Y.fft[,4]
+ # beam fft
+ssr = N*Re(Bf*Conj(Bf))
+ # raw signal spectrum
+sse = Re(rowSums(Df*Conj(Df))) - ssr # raw error spectrum
+# Smooth
+SSE = filter(sse, sides=2, filter=rep(1/L,L), circular=TRUE)
+SSR = filter(ssr, sides=2, filter=rep(1/L,L), circular=TRUE)
+SST = SSE + SSR
+par(mfrow=c(2,1), mar=c(4,4,2,1)+.1)
+Fr = 0:(n-1)/n
+ # the fundamental frequencies
+nFr = 1:200
+ # number of freqs to plot
+plot(Fr[nFr], SST[nFr], type="l", ylab="log Power", xlab="", main="Sum of
+Squares", log="y")
+lines(Fr[nFr], SSE[nFr], type="l", lty=2)
+eF = (N-1)*SSR/SSE; df1 = 2*L; df2 = 2*L*(N-1)
+pvals = pf(eF, df1, df2, lower=FALSE) # p values for FDR
+pID = FDR(pvals, fdr); Fq = qf(1-fdr, df1, df2)
+plot(Fr[nFr], eF[nFr], type="l", ylab="F-statistic", xlab="Frequency",
+main="F Statistic")
+abline(h=c(Fq, eF[pID]), lty=1:2)
+
+```
+
+## 7.5 Random Coefficient Regression
+
+*Example 7.6 Means Test for the fMRI Data*
+
+```{r, eval = FALSE}
+n = 128
+ # length of series
+n.freq = 1 + n/2
+# number of frequencies
+Fr = (0:(n.freq-1))/n
+# the frequencies
+N = c(5,4,5,3,5,4)
+ # number of series for each cell
+n.subject = sum(N)
+ # number of subjects (26)
+n.trt = 6
+ # number of treatments
+L = 3
+ # for smoothing
+num.df = 2*L*(n.trt-1)
+ # df for F test
+den.df = 2*L*(n.subject-n.trt)
+# Design Matrix (Z):
+Z1 = outer(rep(1,N[1]), c(1,1,0,0,0,0))
+Z2 = outer(rep(1,N[2]), c(1,0,1,0,0,0))
+Z3 = outer(rep(1,N[3]), c(1,0,0,1,0,0))
+Z4 = outer(rep(1,N[4]), c(1,0,0,0,1,0))
+Z5 = outer(rep(1,N[5]), c(1,0,0,0,0,1))
+Z6 = outer(rep(1,N[6]), c(1,-1,-1,-1,-1,-1))
+Z = rbind(Z1, Z2, Z3, Z4, Z5, Z6)
+ZZ = t(Z)%*%Z
+SSEF <- rep(NA, n) -> SSER
+HatF = Z%*%solve(ZZ, t(Z))
+HatR = Z[,1]%*%t(Z[,1])/ZZ[1,1]
+par(mfrow=c(3,3), mar=c(3.5,4,0,0), oma=c(0,0,2,2), mgp = c(1.6,.6,0))
+loc.name = c("Cortex 1","Cortex 2","Cortex 3","Cortex 4","Caudate","Thalamus
+1","Thalamus 2","Cerebellum 1","Cerebellum 2")
+for(Loc in 1:9) {
+i = n.trt*(Loc-1)
+Y = cbind(fmri[[i+1]], fmri[[i+2]], fmri[[i+3]], fmri[[i+4]], fmri[[i+5]],
+fmri[[i+6]])
+Y = mvfft(spec.taper(Y, p=.5))/sqrt(n)
+Y = t(Y)
+ # Y is now 26 x 128 FFTs
+# Calculation of Error Spectra
+for (k in 1:n) {
+SSY = Re(Conj(t(Y[,k]))%*%Y[,k])
+SSReg = Re(Conj(t(Y[,k]))%*%HatF%*%Y[,k])
+SSEF[k] = SSY - SSReg
+SSReg = Re(Conj(t(Y[,k]))%*%HatR%*%Y[,k])
+SSER[k]
+ = SSY - SSReg
+ }
+# Smooth
+sSSEF = filter(SSEF, rep(1/L, L), circular = TRUE)
+sSSER = filter(SSER, rep(1/L, L), circular = TRUE)
+eF = (den.df/num.df)*(sSSER-sSSEF)/sSSEF
+plot(Fr,
+ eF[1:n.freq], type="l", xlab="Frequency", ylab="F Statistic",
+ylim=c(0,7))
+abline(h=qf(.999, num.df, den.df),lty=2)
+text(.25, 6.5, loc.name[Loc], cex=1.2)
+ }
+
+```
+**Moving into ANOVA (i.e. treatment effects) Models**
+
+*Example 7.77 Analysis of Power Tests for the fMRI Series*
+
+```{r, eval = FALSE}
+n = 128
+n.freq = 1 + n/2
+Fr = (0:(n.freq-1))/n
+nFr = 1:(n.freq/2)
+N = c(5,4,5,3,5,4)
+n.subject = sum(N)
+n.para = 6
+ # number of parameters
+L = 3
+ # for smoothing
+df.stm = 2*L*(3-1)
+ # stimulus (3 levels: Brush,Heat,Shock)
+df.con = 2*L*(2-1)
+ # conscious (2 levels: Awake,Sedated)
+df.int = 2*L*(3-1)*(2-1) # interaction
+den.df = 2*L*(n.subject-n.para) # df for full model
+Z1 = outer(rep(1,N[1]), c(1, 1, 0, 1, 1, 0))
+Z2 = outer(rep(1,N[2]), c(1, 0, 1, 1, 0, 1))
+Z3 = outer(rep(1,N[3]), c(1, -1, -1, 1, -1, -1))
+Z4 = outer(rep(1,N[4]), c(1, 1, 0, -1, -1, 0))
+Z5 = outer(rep(1,N[5]), c(1, 0, 1, -1, 0, -1))
+Z6 = outer(rep(1,N[6]), c(1, -1, -1, -1, 1, 1))
+Z = rbind(Z1, Z2, Z3, Z4, Z5, Z6)
+ZZ = t(Z)%*%Z
+rep(NA, n)-> SSEF-> SSE.stm-> SSE.con-> SSE.int
+HatF = Z%*%solve(ZZ,t(Z))
+Hat.stm = Z[,-(2:3)]%*%solve(ZZ[-(2:3),-(2:3)], t(Z[,-(2:3)]))
+Hat.con = Z[,-4]%*%solve(ZZ[-4,-4], t(Z[,-4]))
+Hat.int = Z[,-(5:6)]%*%solve(ZZ[-(5:6),-(5:6)], t(Z[,-(5:6)]))
+par(mfrow=c(5,3), mar=c(3.5,4,0,0), oma=c(0,0,2,2), mgp = c(1.6,.6,0))
+loc.name = c("Cortex 1","Cortex 2","Cortex 3","Cortex 4","Caudate", "
+Thalamus 1","Thalamus 2","Cerebellum 1","Cerebellum 2")
+for(Loc in c(1:4,9)) {
+ # only Loc 1 to 4 and 9 used
+i = 6*(Loc-1)
+Y = cbind(fmri[[i+1]], fmri[[i+2]], fmri[[i+3]], fmri[[i+4]], fmri[[i+5]],
+fmri[[i+6]])
+Y = mvfft(spec.taper(Y, p=.5))/sqrt(n); Y = t(Y)
+for (k in 1:n) {
+SSY = Re(Conj(t(Y[,k]))%*%Y[,k])
+SSReg = Re(Conj(t(Y[,k]))%*%HatF%*%Y[,k])
+SSEF[k] = SSY - SSReg
+SSReg = Re(Conj(t(Y[,k]))%*%Hat.stm%*%Y[,k])
+SSE.stm[k] = SSY-SSReg
+SSReg = Re(Conj(t(Y[,k]))%*%Hat.con%*%Y[,k])
+SSE.con[k] = SSY-SSReg
+SSReg = Re(Conj(t(Y[,k]))%*%Hat.int%*%Y[,k])
+SSE.int[k] = SSY-SSReg
+ }
+# Smooth
+sSSEF = filter(SSEF, rep(1/L, L), circular = TRUE)
+sSSE.stm = filter(SSE.stm, rep(1/L, L), circular = TRUE)
+sSSE.con = filter(SSE.con, rep(1/L, L), circular = TRUE)
+sSSE.int = filter(SSE.int, rep(1/L, L), circular = TRUE)
+eF.stm = (den.df/df.stm)*(sSSE.stm-sSSEF)/sSSEF
+eF.con = (den.df/df.con)*(sSSE.con-sSSEF)/sSSEF
+eF.int = (den.df/df.int)*(sSSE.int-sSSEF)/sSSEF
+plot(Fr[nFr],eF.stm[nFr], type="l", xlab="Frequency", ylab="F Statistic",
+ylim=c(0,12))
+abline(h = qf(.999, df.stm, den.df), lty = 2)
+if(Loc==1) mtext("Stimulus", side=3, line=.3, cex=1)
+mtext(loc.name[Loc], side=2, line=3, cex=.9)
+plot(Fr[nFr], eF.con[nFr], type="l", xlab="Frequency", ylab="F Statistic",
+ylim=c(0,12))
+abline(h=qf(.999, df.con, den.df),lty=2)
+if(Loc==1) mtext("Consciousness", side=3, line=.3, cex=1)
+plot(Fr[nFr], eF.int[nFr], type="l", xlab="Frequency", ylab="F Statistic",
+ylim=c(0,12))
+abline(h=qf(.999, df.int, den.df),lty=2)
+if(Loc==1) mtext("Interaction", side=3, line= .3, cex=1)
+ }
+
+```
+
+*Example 7.8 Simultaneous Inference for the fMRI series*
+
+```{r, eval = FALSE}
+n = 128; n.freq = 1 + n/2
+Fr = (0:(n.freq-1))/n; nFr = 1:(n.freq/2)
+N = c(5,4,5,3,5,4); n.subject = sum(N); L = 3
+# Design Matrix
+Z1 = outer(rep(1,N[1]), c(1,0,0,0,0,0))
+Z2 = outer(rep(1,N[2]), c(0,1,0,0,0,0))
+Z3 = outer(rep(1,N[3]), c(0,0,1,0,0,0))
+Z4 = outer(rep(1,N[4]), c(0,0,0,1,0,0))
+Z5 = outer(rep(1,N[5]), c(0,0,0,0,1,0))
+Z6 = outer(rep(1,N[6]), c(0,0,0,0,0,1))
+Z = rbind(Z1, Z2, Z3, Z4, Z5, Z6); ZZ = t(Z)%*%Z
+# Contrasts: 6 by 3
+A = rbind(diag(1,3), diag(1,3))
+nq = nrow(A); num.df = 2*L*nq; den.df = 2*L*(n.subject-nq)
+HatF = Z%*%solve(ZZ, t(Z))
+ # full model
+rep(NA, n)-> SSEF -> SSER; eF = matrix(0,n,3)
+par(mfrow=c(5,3), mar=c(3.5,4,0,0), oma=c(0,0,2,2), mgp = c(1.6,.6,0))
+loc.name = c("Cortex 1", "Cortex 2", "Cortex 3", "Cortex 4", "Caudate", "
+Thalamus 1", "Thalamus 2", "Cerebellum 1", "Cerebellum 2")
+cond.name = c("Brush", "Heat", "Shock")
+for(Loc in c(1:4,9)) {
+i = 6*(Loc-1)
+Y = cbind(fmri[[i+1]], fmri[[i+2]], fmri[[i+3]], fmri[[i+4]], fmri[[i+5]],
+fmri[[i+6]])
+Y = mvfft(spec.taper(Y, p=.5))/sqrt(n); Y = t(Y)
+for (cond in 1:3){
+Q = t(A[,cond])%*%solve(ZZ, A[,cond])
+HR = A[,cond]%*%solve(ZZ, t(Z))
+for (k in 1:n){
+SSY = Re(Conj(t(Y[,k]))%*%Y[,k])
+SSReg = Re(Conj(t(Y[,k]))%*%HatF%*%Y[,k])
+SSEF[k] = (SSY-SSReg)*Q
+SSReg = HR%*%Y[,k]
+SSER[k] = Re(SSReg*Conj(SSReg)) }
+# Smooth
+sSSEF = filter(SSEF, rep(1/L, L), circular = TRUE)
+sSSER = filter(SSER, rep(1/L, L), circular = TRUE)
+eF[,cond] = (den.df/num.df)*(sSSER/sSSEF)
+ }
+plot(Fr[nFr], eF[nFr,1], type="l", xlab="Frequency", ylab="F Statistic",
+ylim=c(0,5))
+abline(h=qf(.999, num.df, den.df),lty=2)
+if(Loc==1) mtext("Brush", side=3, line=.3, cex=1)
+mtext(loc.name[Loc], side=2, line=3, cex=.9)
+plot(Fr[nFr], eF[nFr,2], type="l", xlab="Frequency", ylab="F Statistic",
+ylim=c(0,5))
+abline(h=qf(.999, num.df, den.df),lty=2)
+if(Loc==1) mtext("Heat", side=3, line=.3, cex=1)
+plot(Fr[nFr], eF[nFr,3], type="l", xlab="Frequency", ylab="F Statistic",
+ylim=c(0,5))
+abline(h = qf(.999, num.df, den.df) ,lty=2)
+if(Loc==1) mtext("Shock", side=3, line=.3, cex=1) }
+
+```
+
+*Example 7.9 Equality of Means and Spectral Matrices*
+
+```{r, eval =  FALSE}
+P = 1:1024; S = P+1024; N = 8; n = 1024; p.dim = 2; m = 10; L = 2*m+1
+eq.P = as.ts(eqexp[P,1:8]); eq.S = as.ts(eqexp[S,1:8])
+eq.m = cbind(rowMeans(eq.P), rowMeans(eq.S))
+ex.P = as.ts(eqexp[P,9:16]); ex.S = as.ts(eqexp[S,9:16])
+ex.m = cbind(rowMeans(ex.P), rowMeans(ex.S))
+m.diff = mvfft(eq.m - ex.m)/sqrt(n)
+eq.Pf = mvfft(eq.P-eq.m[,1])/sqrt(n)
+eq.Sf = mvfft(eq.S-eq.m[,2])/sqrt(n)
+ex.Pf = mvfft(ex.P-ex.m[,1])/sqrt(n)
+ex.Sf = mvfft(ex.S-ex.m[,2])/sqrt(n)
+fv11 = rowSums(eq.Pf*Conj(eq.Pf))+rowSums(ex.Pf*Conj(ex.Pf))/(2*(N-1))
+fv12 = rowSums(eq.Pf*Conj(eq.Sf))+rowSums(ex.Pf*Conj(ex.Sf))/(2*(N-1))
+fv22 = rowSums(eq.Sf*Conj(eq.Sf))+rowSums(ex.Sf*Conj(ex.Sf))/(2*(N-1))
+fv21 = Conj(fv12)
+# Equal Means
+T2 = rep(NA, 512)
+for (k in 1:512){ 
+fvk = matrix(c(fv11[k], fv21[k], fv12[k], fv22[k]), 2, 2)
+dk = as.matrix(m.diff[k,])
+T2[k] = Re((N/2)*Conj(t(dk))%*%solve(fvk,dk)) }
+eF = T2*(2*p.dim*(N-1))/(2*N-p.dim-1)
+par(mfrow=c(2,2), mar=c(3,3,2,1), mgp = c(1.6,.6,0), cex.main=1.1)
+freq = 40*(0:511)/n # Hz
+plot(freq, eF, type="l", xlab="Frequency (Hz)", ylab="F Statistic",
+main="Equal Means")
+abline(h = qf(.999, 2*p.dim, 2*(2*N-p.dim-1)))
+# Equal P
+kd = kernel("daniell",m);
+u = Re(rowSums(eq.Pf*Conj(eq.Pf))/(N-1))
+feq.P = kernapply(u, kd, circular=TRUE)
+u = Re(rowSums(ex.Pf*Conj(ex.Pf))/(N-1))
+fex.P = kernapply(u, kd, circular=TRUE)
+plot(freq, feq.P[1:512]/fex.P[1:512], type="l", xlab="Frequency (Hz)",
+ylab="F Statistic", main="Equal P-Spectra")
+abline(h=qf(.999, 2*L*(N-1), 2*L*(N-1)))
+# Equal S
+u = Re(rowSums(eq.Sf*Conj(eq.Sf))/(N-1))
+feq.S = kernapply(u, kd, circular=TRUE)
+u = Re(rowSums(ex.Sf*Conj(ex.Sf))/(N-1))
+fex.S = kernapply(u, kd, circular=TRUE)
+plot(freq, feq.S[1:512]/fex.S[1:512], type="l", xlab="Frequency (Hz)",
+ylab="F Statistic", main="Equal S-Spectra")
+abline(h=qf(.999, 2*L*(N-1), 2*L*(N-1)))
+# Equal Spectra
+u = rowSums(eq.Pf*Conj(eq.Sf))/(N-1)
+feq.PS = kernapply(u, kd, circular=TRUE)
+u = rowSums(ex.Pf*Conj(ex.Sf)/(N-1))
+fex.PS = kernapply(u, kd, circular=TRUE)
+fv11 = kernapply(fv11, kd, circular=TRUE)
+fv22 = kernapply(fv22, kd, circular=TRUE)
+fv12 = kernapply(fv12, kd, circular=TRUE)
+Mi = L*(N-1); M = 2*Mi
+TS = rep(NA,512)
+for (k in 1:512){
+det.feq.k = Re(feq.P[k]*feq.S[k] - feq.PS[k]*Conj(feq.PS[k]))
+det.fex.k = Re(fex.P[k]*fex.S[k] - fex.PS[k]*Conj(fex.PS[k]))
+det.fv.k = Re(fv11[k]*fv22[k] - fv12[k]*Conj(fv12[k]))
+log.n1 = log(M)*(M*p.dim); log.d1 = log(Mi)*(2*Mi*p.dim)
+log.n2 = log(Mi)*2 +log(det.feq.k)*Mi + log(det.fex.k)*Mi
+log.d2 = (log(M)+log(det.fv.k))*M
+r = 1 - ((p.dim+1)*(p.dim-1)/6*p.dim*(2-1))*(2/Mi - 1/M)
+TS[k] = -2*r*(log.n1+log.n2-log.d1-log.d2)
+ }
+plot(freq, TS, type="l", xlab="Frequency (Hz)", ylab="Chi-Sq Statistic",
+main="Equal Spectral Matrices")
+abline(h = qchisq(.9999, p.dim^2))
+
+```
+
+## 7.7 Discriminant and Cluster Analysis
+
+*Example 7.10 Discriminant Analysis Using Amplitudes*
+```{r Chapter7point7, eval = FALSE}
+P = 1:1024; S = P+1024
+mag.P = log10(apply(eqexp[P,], 2, max) - apply(eqexp[P,], 2, min))
+mag.S = log10(apply(eqexp[S,], 2, max) - apply(eqexp[S,], 2, min))
+eq.P = mag.P[1:8]; eq.S = mag.S[1:8]
+ex.P = mag.P[9:16]; ex.S = mag.S[9:16]
+NZ.P = mag.P[17];
+NZ.S = mag.S[17]
+# Compute linear discriminant function
+cov.eq = var(cbind(eq.P, eq.S))
+cov.ex = var(cbind(ex.P, ex.S))
+cov.pooled = (cov.ex + cov.eq)/2
+means.eq = colMeans(cbind(eq.P, eq.S))
+means.ex = colMeans(cbind(ex.P, ex.S))
+slopes.eq = solve(cov.pooled, means.eq)
+inter.eq = -sum(slopes.eq*means.eq)/2
+slopes.ex = solve(cov.pooled, means.ex)
+inter.ex = -sum(slopes.ex*means.ex)/2
+d.slopes = slopes.eq - slopes.ex
+d.inter = inter.eq - inter.ex
+# Classify new observation
+new.data = cbind(NZ.P, NZ.S)
+d = sum(d.slopes*new.data) + d.inter
+post.eq = exp(d)/(1+exp(d))
+# Print (disc function, posteriors) and plot results
+cat(d.slopes[1], "mag.P +" , d.slopes[2], "mag.S +" , d.inter,"\n")
+cat("P(EQ|data) =", post.eq, " P(EX|data) =", 1-post.eq, "\n" )
+plot(eq.P, eq.S, xlim=c(0,1.5), ylim=c(.75,1.25), xlab="log mag(P)", ylab ="log mag(S)",
+  pch = 8, cex=1.1, lwd=2, main="Classification Based on Magnitude Features")
+points(ex.P, ex.S, pch = 6, cex=1.1, lwd=2)
+points(new.data, pch = 3, cex=1.1, lwd=2)
+abline(a = -d.inter/d.slopes[2], b = -d.slopes[1]/d.slopes[2])
+text(eq.P-.07,eq.S+.005, label=names(eqexp[1:8]), cex=.8)
+text(ex.P+.07,ex.S+.003, label=names(eqexp[9:16]), cex=.8)
+text(NZ.P+.05,NZ.S+.003, label=names(eqexp[17]), cex=.8)
+legend("topright",c("EQ","EX","NZ"),pch=c(8,6,3),pt.lwd=2,cex=1.1)
+# Cross-validation
+all.data = rbind(cbind(eq.P, eq.S), cbind(ex.P, ex.S))
+post.eq <- rep(NA, 8) -> post.ex
+for(j in 1:16) {
+if (j <= 8){samp.eq = all.data[-c(j, 9:16),]
+samp.ex = all.data[9:16,]}
+if (j > 8){samp.eq = all.data[1:8,]
+samp.ex = all.data[-c(j, 1:8),]
+ }
+df.eq = nrow(samp.eq)-1; df.ex = nrow(samp.ex)-1
+mean.eq = colMeans(samp.eq); mean.ex = colMeans(samp.ex)
+cov.eq = var(samp.eq); cov.ex = var(samp.ex)
+cov.pooled = (df.eq*cov.eq + df.ex*cov.ex)/(df.eq + df.ex)
+slopes.eq = solve(cov.pooled, mean.eq)
+inter.eq = -sum(slopes.eq*mean.eq)/2
+slopes.ex = solve(cov.pooled, mean.ex)
+inter.ex = -sum(slopes.ex*mean.ex)/2
+d.slopes = slopes.eq - slopes.ex
+d.inter = inter.eq - inter.ex
+d = sum(d.slopes*all.data[j,]) + d.inter
+if (j <= 8) post.eq[j] = exp(d)/(1+exp(d))
+if (j > 8) post.ex[j-8] = 1/(1+exp(d)) }
+Posterior = cbind(1:8, post.eq, 1:8, post.ex)
+colnames(Posterior) = c("EQ","P(EQ|data)","EX","P(EX|data)")
+round(Posterior,3) # Results from Cross-validation (not shown)
+
+```
+
+**Frequency Domain Discrimination** and **Measures of Disparity**
+
+```{r, eval = FALSE}
+P = 1:1024; S = P+1024; p.dim = 2; n =1024
+eq = as.ts(eqexp[, 1:8])
+ex = as.ts(eqexp[, 9:16])
+nz = as.ts(eqexp[, 17])
+f.eq <- array(dim=c(8, 2, 2, 512)) -> f.ex
+f.NZ = array(dim=c(2, 2, 512))
+# below calculates determinant for 2x2 Hermitian matrix
+det.c <- function(mat){return(Re(mat[1,1]*mat[2,2]-mat[1,2]*mat[2,1]))}
+L = c(15,13,5)
+ # for smoothing
+for (i in 1:8){
+ # compute spectral matrices
+f.eq[i,,,] = mvspec(cbind(eq[P,i], eq[S,i]), spans=L, taper=.5)$fxx
+f.ex[i,,,] = mvspec(cbind(ex[P,i], ex[S,i]), spans=L, taper=.5)$fxx}
+u = mvspec(cbind(nz[P], nz[S]), spans=L, taper=.5)
+f.NZ = u$fxx
+bndwidth = u$bandwidth*sqrt(12)*40 # about .75 Hz
+fhat.eq = apply(f.eq, 2:4, mean)
+ # average spectra
+fhat.ex = apply(f.ex, 2:4, mean)
+# plot the average spectra
+par(mfrow=c(2,2), mar=c(3,3,2,1), mgp = c(1.6,.6,0))
+Fr = 40*(1:512)/n
+plot(Fr,Re(fhat.eq[1,1,]),type="l",xlab="Frequency (Hz)",ylab="")
+plot(Fr,Re(fhat.eq[2,2,]),type="l",xlab="Frequency (Hz)",ylab="")
+plot(Fr,Re(fhat.ex[1,1,]),type="l",xlab="Frequency (Hz)",ylab="")
+plot(Fr,Re(fhat.ex[2,2,]),type="l",xlab="Frequency (Hz)",ylab="")
+mtext("Average P-spectra", side=3, line=-1.5, adj=.2, outer=TRUE)
+mtext("Earthquakes", side=2, line=-1, adj=.8, outer=TRUE)
+mtext("Average S-spectra", side=3, line=-1.5, adj=.82, outer=TRUE)
+mtext("Explosions", side=2, line=-1, adj=.2, outer=TRUE)
+par(fig = c(.75, 1, .75, 1), new = TRUE)
+ker = kernel("modified.daniell", L)$coef; ker = c(rev(ker),ker[-1])
+plot((-33:33)/40, ker, type="l", ylab="", xlab="", cex.axis=.7,
+yaxp=c(0,.04,2))
+# Choose alpha
+Balpha = rep(0,19)
+for (i in 1:19){ alf=i/20
+for (k in 1:256) {
+Balpha[i]= Balpha[i] + Re(log(det.c(alf*fhat.ex[,,k] +
+(1-alf)*fhat.eq[,,k])/det.c(fhat.eq[,,k])) -
+alf*log(det.c(fhat.ex[,,k])/det.c(fhat.eq[,,k])))} }
+alf = which.max(Balpha)/20
+ # alpha = .4
+# Calculate Information Criteria
+rep(0,17) -> KLDiff -> BDiff -> KLeq -> KLex -> Beq -> Bex
+for (i in 1:17){
+if (i <= 8) f0 = f.eq[i,,,]
+if (i > 8 & i <= 16) f0 = f.ex[i-8,,,]
+if (i == 17) f0 = f.NZ
+for (k in 1:256) {
+ # only use freqs out to .25
+tr = Re(sum(diag(solve(fhat.eq[,,k],f0[,,k]))))
+KLeq[i] = KLeq[i] + tr + log(det.c(fhat.eq[,,k])) - log(det.c(f0[,,k]))
+Beq[i] = Beq[i] + Re(log(det.c(alf*f0[,,k]+(1-alf)*fhat.eq[,,k])/det.c(fhat.eq[,,k])) -
+   alf*log(det.c(f0[,,k])/det.c(fhat.eq[,,k])))
+tr = Re(sum(diag(solve(fhat.ex[,,k],f0[,,k]))))
+KLex[i] = KLex[i] + tr + log(det.c(fhat.ex[,,k])) - log(det.c(f0[,,k]))
+Bex[i] = Bex[i] + Re(log(det.c(alf*f0[,,k]+(1-alf)*fhat.ex[,,k])/det.c(fhat.ex[,,k])) -
+   alf*log(det.c(f0[,,k])/det.c(fhat.ex[,,k]))) }
+KLDiff[i] = (KLeq[i] - KLex[i])/n
+BDiff[i] = (Beq[i] - Bex[i])/(2*n) }
+x.b = max(KLDiff)+.1; x.a = min(KLDiff)-.1
+y.b = max(BDiff)+.01; y.a = min(BDiff)-.01
+dev.new()
+plot(KLDiff[9:16], BDiff[9:16], type="p", xlim=c(x.a,x.b), ylim=c(y.a,y.b),
+cex=1.1,lwd=2, xlab="Kullback-Leibler Difference",ylab="Chernoff
+Difference", main="Classification Based on Chernoff and K-L
+Distances", pch=6)
+points(KLDiff[1:8], BDiff[1:8], pch=8, cex=1.1, lwd=2)
+points(KLDiff[17], BDiff[17], pch=3, cex=1.1, lwd=2)
+legend("topleft", legend=c("EQ", "EX", "NZ"), pch=c(8,6,3), pt.lwd=2)
+abline(h=0, v=0, lty=2, col="gray")
+text(KLDiff[-c(1,2,3,7,14)]-.075, BDiff[-c(1,2,3,7,14)],
+label=names(eqexp[-c(1,2,3,7,14)]), cex=.7)
+text(KLDiff[c(1,2,3,7,14)]+.075, BDiff[c(1,2,3,7,14)],
+label=names(eqexp[c(1,2,3,7,14)]), cex=.7)
+
+```
+
+
+*Example 7.12 Cluster Analysis for Earthquakes and Explosions*
+
+```{r, eval = FALSE}
+library(cluster)
+P = 1:1024; S = P+1024; p.dim = 2; n =1024
+eq = as.ts(eqexp[, 1:8])
+ex = as.ts(eqexp[, 9:16])
+nz = as.ts(eqexp[, 17])
+f = array(dim=c(17, 2, 2, 512))
+L = c(15, 15)
+ # for smoothing
+for (i in 1:8){
+ # compute spectral matrices
+f[i,,,] = mvspec(cbind(eq[P,i], eq[S,i]), spans=L, taper=.5)$fxx
+f[i+8,,,] = mvspec(cbind(ex[P,i], ex[S,i]), spans=L, taper=.5)$fxx }
+f[17,,,] = mvspec(cbind(nz[P], nz[S]), spans=L, taper=.5)$fxx
+JD = matrix(0, 17, 17)
+# Calculate Symmetric Information Criteria
+for (i in 1:16){
+for (j in (i+1):17){
+for (k in 1:256) {
+ # only use freqs out to .25
+tr1 = Re(sum(diag(solve(f[i,,,k], f[j,,,k]))))
+tr2 = Re(sum(diag(solve(f[j,,,k], f[i,,,k]))))
+JD[i,j] = JD[i,j] + (tr1 + tr2 - 2*p.dim)}}}
+JD = (JD + t(JD))/n
+colnames(JD) = c(colnames(eq), colnames(ex), "NZ")
+rownames(JD) = colnames(JD)
+cluster.2 = pam(JD, k = 2, diss = TRUE)
+summary(cluster.2) # print results
+par(mgp = c(1.6,.6,0), cex=3/4, cex.lab=4/3, cex.main=4/3)
+clusplot(JD, cluster.2$cluster, col.clus=1, labels=3, lines=0, col.p=1,
+main="Clustering Results for Explosions and Earthquakes")
+text(-7,-.5, "Group I", cex=1.1, font=2)
+text(1, 5, "Group II", cex=1.1, font=2)
+
+```
+
+## 7.8 Principal Components and Factor Analysis
+
+Related topics of spectral domain PCA and factor analysis for time series. Canonical presentation is Brillinger 1981, Chapters 9 and 10. 
+
+*Example 7.13 PCA of the fMRI Data*
+
+```{r, eval = FALSE}
+n = 128; Per = abs(mvfft(fmri1[,-1]))^2/n
+par(mfrow=c(2,4), mar=c(3,2,2,1), mgp = c(1.6,.6,0), oma=c(0,1,0,0))
+for (i in 1:8){ plot(0:20, Per[1:21,i], type="l", ylim=c(0,8),
+main=colnames(fmri1)[i+1], xlab="Cycles",ylab="", xaxp=c(0,20,5))}
+mtext("Periodogram", side=2, line=-.3, outer=TRUE, adj=c(.2,.8))
+dev.new()
+fxx = mvspec(fmri1[,-1], kernel("daniell", c(1,1)), taper=.5, plot=FALSE)$fxx
+l.val = rep(NA,64)
+for (k in 1:64) {
+u = eigen(fxx[,,k], symmetric=TRUE, only.values = TRUE)
+l.val[k] = u$values[1]} # largest e-value
+plot(l.val, type="n", xaxt="n", xlab="Cycles (Frequency x 128)", ylab="First
+Principal Component")
+axis(1, seq(4,60,by=8)); grid(lty=2, nx=NA, ny=NULL)
+abline(v=seq(4,60,by=8), col='lightgray', lty=2); lines(l.val)
+# At freq 4/128
+u = eigen(fxx[,,4], symmetric=TRUE)
+lam=u$values; evec=u$vectors
+lam[1]/sum(lam)
+ # % of variance explained
+sig.e1 = matrix(0,8,8)
+for (l in 2:5){
+ # last 3 evs are 0
+sig.e1 = sig.e1 + lam[l]*evec[,l]%*%Conj(t(evec[,l]))/(lam[1]-lam[l])^2}
+sig.e1 = Re(sig.e1)*lam[1]*sum(kernel("daniell", c(1,1))$coef^2)
+p.val = round(pchisq(2*abs(evec[,1])^2/diag(sig.e1), 2, lower.tail=FALSE), 3)
+cbind(colnames(fmri1)[-1], abs(evec[,1]), p.val) # table values
+
+```
+
+*Example 7.14 Single Factor Analysis of the fMRI Data*
+
+```{r, eval = FALSE}
+bhat = sqrt(lam[1])*evec[,1]
+Dhat = Re(diag(fxx[,,4] - bhat%*%Conj(t(bhat))))
+res = Mod(fxx[,,4] - Dhat - bhat%*%Conj(t(bhat)))
+
+```
+
+*Example 7.15 Government Spending, Private Investment and Unemployment*
+
+```{r, eval = FALSE}
+gr = diff(log(ts(econ5, start=1948, frequency=4))) # growth rate
+plot(100*gr, main="Growth Rates (%)")
+# scale each series to have variance 1
+gr = ts(apply(gr,2,scale), freq=4)
+ # scaling strips ts attributes
+L = c(7,7)
+ # degree of smoothing
+gr.spec = mvspec(gr, spans=L, demean=FALSE, detrend=FALSE, taper=.25)
+dev.new()
+plot(kernel("modified.daniell", L)) # view the kernel - not shown
+dev.new()
+plot(gr.spec, log="no", main="Individual Spectra", lty=1:5, lwd=2)
+legend("topright", colnames(econ5), lty=1:5, lwd=2)
+dev.new()
+plot.spec.coherency(gr.spec, ci=NA, main="Squared Coherencies")
+# PCs
+n.freq = length(gr.spec$freq)
+lam = matrix(0,n.freq,5)
+for (k in 1:n.freq) lam[k,] = eigen(gr.spec$fxx[,,k], symmetric=TRUE,
+    only.values=TRUE)$values
+dev.new()
+par(mfrow=c(2,1), mar=c(4,2,2,1), mgp=c(1.6,.6,0))
+plot(gr.spec$freq, lam[,1], type="l", ylab="", xlab="Frequency", main="First
+Eigenvalue")
+abline(v=.25, lty=2)
+plot(gr.spec$freq, lam[,2], type="l", ylab="", xlab="Frequency",
+main="Second Eigenvalue")
+abline(v=.125, lty=2)
+e.vec1 = eigen(gr.spec$fxx[,,10], symmetric=TRUE)$vectors[,1]
+e.vec2 = eigen(gr.spec$fxx[,,5], symmetric=TRUE)$vectors[,2]
+round(Mod(e.vec1), 2); round(Mod(e.vec2),3)
+
+```
+
+## 7.9 The Spectral Envelope
+
+Motivated by collaborations with researchers who collected *categorical-valued* time series with an interest in the cyclic behavior of the data.
+
+*Example 7.17 Analysis of an Epstein-Barr Virus Gene*
+
+```{r, eval = FALSE}
+u = factor(bnrf1ebv) # first, input the data as factors and then
+x = model.matrix(~u-1)[,1:3] # make an indicator matrix
+# x = x[1:1000,] # select subsequence if desired
+Var = var(x) # var-cov matrix
+xspec = mvspec(x, spans=c(7,7), plot=FALSE)
+fxxr = Re(xspec$fxx) # fxxr is real(fxx)
+# compute Q = Var^-1/2
+ev = eigen(Var)
+Q = ev$vectors%*%diag(1/sqrt(ev$values))%*%t(ev$vectors)
+# compute spec envelope and scale vectors
+num = xspec$n.used # sample size used for FFT
+nfreq = length(xspec$freq)
+ # number of freqs used
+specenv = matrix(0,nfreq,1) # initialize the spec envelope
+beta = matrix(0,nfreq,3)
+ # initialize the scale vectors
+for (k in 1:nfreq){
+ev = eigen(2*Q%*%fxxr[,,k]%*%Q/num, symmetric=TRUE)
+specenv[k] = ev$values[1] # spec env at freq k/n is max evalue
+b = Q%*%ev$vectors[,1]
+ # beta at freq k/n
+beta[k,] = b/sqrt(sum(b^2)) } # helps to normalize beta
+# output and graphics
+frequency = xspec$freq
+plot(frequency, 100*specenv, type="l", ylab="Spectral Envelope (%)")
+# add significance threshold to plot
+m = xspec$kernel$m
+etainv = sqrt(sum(xspec$kernel[-m:m]^2))
+thresh=100*(2/num)*exp(qnorm(.9999)*etainv)
+abline(h=thresh, lty=6, col=4)
+# details
+output = cbind(frequency, specenv, beta)
+colnames(output) = c("freq","specenv", "A", "C", "G")
+round(output,3)
+
+
+```
+
+*Example 7.18 Optimal Transformations for Financial Data: NYSE Returns*
+
+```{r, eval = FALSE}
+u = astsa::nyse
+ # accept no substitutes
+x = cbind(u, abs(u), u^2)
+Var = var(x)
+ # var-cov matrix
+xspec = mvspec(x, spans=c(5,3), taper=.5, plot=FALSE)
+fxxr = Re(xspec$fxx)
+ # fxxr is real(fxx)
+# compute Q = Var^-1/2
+ev = eigen(Var)
+Q = ev$vectors%*%diag(1/sqrt(ev$values))%*%t(ev$vectors)
+# compute spec env and scale vectors
+num = xspec$n.used
+ # sample size used for FFT
+nfreq = length(xspec$freq)
+ # number of freqs used
+specenv = matrix(0,nfreq,1)
+ # initialize the spec envelope
+beta = matrix(0,nfreq,3)
+ # initialize the scale vectors
+for (k in 1:nfreq){
+ev = eigen(2*Q%*%fxxr[,,k]%*%Q/num) # get evalues of normalized spectral
+#matrix at freq k/n
+specenv[k] = ev$values[1]
+ # spec env at freq k/n is max evalue
+b = Q%*%ev$vectors[,1]
+ # beta at freq k/n
+beta[k,] = b/b[1]
+}
+ # first coef is always 1
+# output and graphics
+par(mar=c(2.5,2.75,.5,.5), mgp=c(1.5,.6,0))
+frequency = xspec$freq
+plot(frequency, 100*specenv, type="l", ylab="Spectral Envelope (%)")
+m = xspec$kernel$m
+etainv = sqrt(sum(xspec$kernel[-m:m]^2))
+thresh = 100*(2/num)*exp(qnorm(.9999)*etainv)*matrix(1,nfreq,1)
+lines(frequency, thresh, lty=2, col=4)
+# details
+b = sign(b[2])*output[2,3:5]
+ # sign of |x| positive for beauty
+output = cbind(frequency, specenv, beta)
+colnames(output)=c("freq","specenv","x", "|x|", "x^2"); round(output, 4)
+dev.new(); par(mar=c(2.5,2.5,.5,.5), mgp=c(1.5,.6,0))
+# plot transform
+g = function(x) { b[1]*x+b[2]*abs(x)+b[3]*x^2 }
+curve(g, -.2, .2, panel.first=grid(lty=2))
+g2 = function(x) { b[2]*abs(x) }
+ # corresponding |x|
+curve(g2, -.2,.2, add=TRUE, lty=6, col=4)
+
+```
+
+
